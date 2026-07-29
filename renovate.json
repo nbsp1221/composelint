@@ -6,6 +6,10 @@
     "schedule:monthly",
     ":semanticCommitsDisabled"
   ],
+  "description": [
+    "GitHub's own auto-merge is not used: with no required status checks on main, GitHub would be free to merge a Renovate branch before CI has even started. Renovate merges the branch itself instead, and it only does that once the branch is green."
+  ],
+  "platformAutomerge": false,
   "commitMessagePrefix": "\u2b06\ufe0f",
   "prHourlyLimit": 2,
   "packageRules": [
