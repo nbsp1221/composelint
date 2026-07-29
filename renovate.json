@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:js-lib",
+    "security:minimumReleaseAgeNpm",
+    "schedule:monthly",
+    ":semanticCommitsDisabled"
+  ],
+  "commitMessagePrefix": "\u2b06\ufe0f",
+  "prHourlyLimit": 2,
+  "packageRules": [
+    {
+      "description": "Development tooling never reaches a user of this package, so a green CI is enough to take a patch or a minor.",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true
+    },
+    {
+      "description": "Runtime dependencies decide what the linter reports, so every upgrade is reviewed by hand.",
+      "matchDepTypes": ["dependencies"],
+      "automerge": false
+    }
+  ]
+}
