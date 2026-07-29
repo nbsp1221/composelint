@@ -1,0 +1,59 @@
+name: Rule proposal
+description: A new check, or a change to an existing one
+labels: [rule]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A rule earns its place by catching a real mistake without reporting
+        code that is deliberately written that way. False positives are the
+        reason people stop trusting a linter, so the cases below matter more
+        than the description.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What should be reported, and why it is a problem
+    validations:
+      required: true
+
+  - type: textarea
+    id: incorrect
+    attributes:
+      label: Should be reported
+      render: yaml
+      placeholder: |
+        services:
+          db:
+            image: postgres:16
+            volumes:
+              - /var/run/docker.sock:/var/run/docker.sock
+    validations:
+      required: true
+
+  - type: textarea
+    id: correct
+    attributes:
+      label: Should stay quiet
+      description: >
+        Files that look similar but are fine, including uses that are
+        deliberate. This is what decides whether the rule can exist.
+      render: yaml
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Suggested default in the `recommended` preset
+      options:
+        - error — the file is wrong or obsolete
+        - warn — opinionated, or legitimate in some setups
+    validations:
+      required: true
+
+  - type: input
+    id: prior-art
+    attributes:
+      label: Prior art
+      description: A Docker document, another linter, or a security guide that says the same.

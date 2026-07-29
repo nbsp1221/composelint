@@ -1,0 +1,12 @@
+composelint
+Copyright (c) nbsp1221
+
+This product includes software developed by the Compose Specification project.
+
+  File:    schemas/compose-spec.json
+  Source:  https://github.com/compose-spec/compose-spec/blob/main/schema/compose-spec.json
+  License: Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+
+The file is vendored verbatim; provenance (upstream commit, date, checksum) is
+recorded in schemas/compose-spec.meta.json and can be refreshed with
+`pnpm schema:update`.

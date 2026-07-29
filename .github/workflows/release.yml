@@ -1,0 +1,92 @@
+name: Release
+
+# A pushed version tag is the only trigger: no `workflow_run`, no
+# `pull_request_target`, no manual branch input, so this workflow cannot be
+# reached from a pull request.
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+jobs:
+  verify:
+    name: Verify the tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tag must match the version in package.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $version" >&2
+            exit 1
+          fi
+
+      - run: pnpm lint:ci
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm test:e2e
+
+  publish:
+    name: Publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    # A protected environment puts a human approval in front of the publish.
+    environment: release
+    permissions:
+      contents: read
+      # The only credential this workflow uses: a short-lived OIDC token that
+      # npm exchanges for a publish token. There is no npm token to store.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          # Required for the OIDC exchange.
+          registry-url: https://registry.npmjs.org
+          # `packageManager` in package.json would otherwise turn the
+          # dependency cache on; a release build should not reuse anything a
+          # previous run wrote.
+          package-manager-cache: false
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # Trusted publishing needs npm 11.5.1 or later; the version bundled with
+      # the runner may be older.
+      - run: npm install --global npm@latest
+
+      # Authentication happens through OIDC, and npm attaches a provenance
+      # attestation automatically for a trusted publish from a public
+      # repository — no flags, no token.
+      - run: npm publish
+
+  github-release:
+    name: Create the GitHub release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Create release from the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md)."

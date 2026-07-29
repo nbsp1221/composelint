@@ -1,0 +1,13 @@
+# Anything that is neither a bug nor a rule proposal — a question, an idea, a
+# packaging problem — is welcome as a blank issue.
+blank_issues_enabled: true
+contact_links:
+  - name: Configuration reference
+    url: https://github.com/nbsp1221/composelint/blob/main/docs/configuration.md
+    about: Where the configuration lives, and every option it takes.
+  - name: Suppressing a rule
+    url: https://github.com/nbsp1221/composelint/blob/main/docs/suppressions.md
+    about: How to make a single line an exception instead of turning a rule off.
+  - name: Report a vulnerability
+    url: https://github.com/nbsp1221/composelint/security/advisories/new
+    about: Privately, not as a public issue.
