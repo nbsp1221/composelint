@@ -12,6 +12,24 @@ package itself runs on any Node 22. pnpm as declared in `packageManager`.
 
 Participation is covered by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Commits and pull requests
+
+Commit subjects follow [gitmoji](https://gitmoji.dev): an emoji, a space, then a
+sentence in the imperative.
+
+```
+✨ Add a rule for duplicate published ports
+🐛 Keep an inherited healthcheck from being reported
+📝 Document the forbiddenTags option
+♻️ Move include resolution out of the core
+⬆️ Update dependency yaml to v2.9.1
+```
+
+Pull requests are squash merged, so **the pull request title becomes the commit
+message on `main`** — write the title the same way. Nothing in the release
+pipeline parses commit messages, so the convention is for readers, not for
+tooling.
+
 ## Checks
 
 ```sh

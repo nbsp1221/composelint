@@ -4,6 +4,8 @@
 
 ## Checks
 
+- [ ] The title follows the [gitmoji](https://gitmoji.dev) convention — it
+      becomes the commit message on `main`
 - [ ] `pnpm lint`, `pnpm typecheck` and `pnpm test:all` pass
 - [ ] A test covers the change — for a bug fix, one that fails without it
 - [ ] For a new or changed rule: the doc under `docs/rules/` and the table in
