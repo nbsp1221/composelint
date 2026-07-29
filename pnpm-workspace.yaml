@@ -1,2 +1,4 @@
-onlyBuiltDependencies:
-  - esbuild
+# pnpm 11 renamed this setting from `onlyBuiltDependencies` (a list) and now
+# fails the install until every package with a build script is answered for.
+allowBuilds:
+  esbuild: true
