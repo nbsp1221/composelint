@@ -1,5 +1,10 @@
 import { cosmiconfig } from "cosmiconfig";
-import type { ResolvedConfig, RuleConfig, Severity } from "../core/types.js";
+import type {
+  PublishedPortAllowance,
+  ResolvedConfig,
+  RuleConfig,
+  Severity,
+} from "../core/types.js";
 import { allRules } from "../rules/index.js";
 import { DEFAULT_EXCLUDE, DEFAULT_PARTIALS } from "./defaults.js";
 import {
@@ -240,6 +245,93 @@ function isStringArray(value: unknown): value is string[] {
   );
 }
 
+/** Compose permits platform-specific protocols in addition to TCP and UDP. */
+const PUBLISHED_PORT = /^(\d+)(?:-(\d+))?\/([a-z][a-z0-9+.-]*)$/i;
+
+function isValidPublishedPort(value: string): boolean {
+  const match = PUBLISHED_PORT.exec(value);
+  if (!match) return false;
+
+  const start = Number(match[1]);
+  const end = Number(match[2] ?? match[1]);
+  return start >= 1 && end <= 65_535 && start <= end;
+}
+
+function validatePublishedPortAllowances(
+  ruleName: string,
+  option: string,
+  value: unknown,
+  warnings: string[],
+): PublishedPortAllowance[] | undefined {
+  if (!Array.isArray(value)) {
+    warnings.push(
+      `Rule "${ruleName}": option "${option}" must be an array of allowance objects — ignored.`,
+    );
+    return undefined;
+  }
+
+  const accepted: PublishedPortAllowance[] = [];
+  for (const [index, entry] of value.entries()) {
+    const prefix = `Rule "${ruleName}": option "${option}" entry ${index + 1}`;
+    if (!isPlainObject(entry)) {
+      warnings.push(`${prefix} must be an object — ignored.`);
+      continue;
+    }
+
+    const unknown = Object.keys(entry).filter(
+      (key) => !["service", "published", "reason"].includes(key),
+    );
+    if (unknown.length > 0) {
+      warnings.push(
+        `${prefix} has unknown ${unknown.length === 1 ? "key" : "keys"} ${unknown.map((key) => `"${key}"`).join(", ")} — ignored.`,
+      );
+      continue;
+    }
+
+    if (
+      typeof entry.service !== "string" ||
+      entry.service.trim() === "" ||
+      entry.service !== entry.service.trim()
+    ) {
+      warnings.push(
+        `${prefix} must have a non-empty "service" without surrounding whitespace — ignored.`,
+      );
+      continue;
+    }
+    if (!isStringArray(entry.published) || entry.published.length === 0) {
+      warnings.push(
+        `${prefix} must have a non-empty "published" array of strings — ignored.`,
+      );
+      continue;
+    }
+
+    const invalidPort = entry.published.find(
+      (published) => !isValidPublishedPort(published),
+    );
+    if (invalidPort !== undefined) {
+      warnings.push(
+        `${prefix} has invalid published port "${invalidPort}"; expected <port-or-range>/<protocol> — ignored.`,
+      );
+      continue;
+    }
+    if (
+      entry.reason !== undefined &&
+      (typeof entry.reason !== "string" || entry.reason.trim() === "")
+    ) {
+      warnings.push(`${prefix} has an invalid "reason" — ignored.`);
+      continue;
+    }
+
+    accepted.push({
+      service: entry.service,
+      published: entry.published.map((published) => published.toLowerCase()),
+      ...(entry.reason === undefined ? {} : { reason: entry.reason }),
+    });
+  }
+
+  return accepted;
+}
+
 /**
  * Keeps only the options a rule declares, with the declared type. An unknown
  * option name is almost always a typo, and a value of the wrong type would make
@@ -271,6 +363,17 @@ function validateOptions(
       warnings.push(
         `Rule "${ruleName}": option "${option}" must be an array of strings — ignored.`,
       );
+      continue;
+    }
+
+    if (type === "published-port-allowances") {
+      const allowances = validatePublishedPortAllowances(
+        ruleName,
+        option,
+        value,
+        warnings,
+      );
+      if (allowances !== undefined) accepted[option] = allowances;
       continue;
     }
 

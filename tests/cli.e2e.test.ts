@@ -310,6 +310,75 @@ describe("configuration", () => {
     expect(result.stdout).not.toContain("image-require-tag");
   });
 
+  it("allows only the configured public service ports", async () => {
+    const compose = [
+      "name: qa",
+      "services:",
+      "  caddy:",
+      "    image: caddy:2.10",
+      "    ports:",
+      '      - "80:80"',
+      '      - "443:443"',
+      '      - "443:443/udp"',
+      '    healthcheck: { test: ["CMD", "true"] }',
+      "  db:",
+      "    image: postgres:17",
+      "    ports:",
+      '      - "5432:5432"',
+      '    healthcheck: { test: ["CMD", "true"] }',
+      "  telecom:",
+      "    image: alpine:3.22",
+      "    ports:",
+      '      - "9899:9899/sctp"',
+      '    healthcheck: { test: ["CMD", "true"] }',
+      "",
+    ].join("\n");
+    const dir = await workspace({
+      "compose.yaml": compose,
+      ".composelintrc.json": JSON.stringify({
+        rules: {
+          "no-unbound-ports": [
+            "warn",
+            {
+              allow: [
+                {
+                  service: "caddy",
+                  published: ["80/tcp", "443/tcp", "443/udp"],
+                  reason: "Public ingress",
+                },
+                {
+                  service: "telecom",
+                  published: ["9899/sctp"],
+                  reason: "Public SCTP endpoint",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    });
+
+    const result = await cliRun(dir, [
+      "--format",
+      "json",
+      "--max-warnings",
+      "0",
+    ]);
+    const output = JSON.parse(result.stdout) as {
+      files: Array<{
+        diagnostics: Array<{ ruleId: string; message: string }>;
+      }>;
+    };
+    const portDiagnostics = output.files
+      .flatMap((file) => file.diagnostics)
+      .filter((diagnostic) => diagnostic.ruleId === "no-unbound-ports");
+
+    expect(result.code).toBe(1);
+    expect(portDiagnostics).toHaveLength(1);
+    expect(portDiagnostics[0].message).toContain('Service "db"');
+    expect(result.stderr).toContain("1 warning exceeds");
+  });
+
   it("excludes files by glob", async () => {
     const dir = await workspace({
       "compose.yaml": CLEAN,

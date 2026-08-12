@@ -41,8 +41,17 @@ export interface LintResult {
   fixed: boolean;
 }
 
+/** One explicitly approved public host-port surface. */
+export interface PublishedPortAllowance {
+  service: string;
+  /** Published host ports in `<port-or-range>/<protocol>` form. */
+  published: string[];
+  /** Human-readable context for reviewers; it does not affect matching. */
+  reason?: string;
+}
+
 /** Types a rule option may take; validated when the configuration is read. */
-export type RuleOptionType = "string[]";
+export type RuleOptionType = "string[]" | "published-port-allowances";
 
 export interface RuleMeta {
   /** The rule's identity, used in configuration, suppressions and output. */

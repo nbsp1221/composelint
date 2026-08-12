@@ -1,4 +1,8 @@
-import type { Rule, RuleContext } from "../../core/types.js";
+import type {
+  PublishedPortAllowance,
+  Rule,
+  RuleContext,
+} from "../../core/types.js";
 import { reportServiceValue } from "../report.js";
 
 /** Host addresses that mean "every interface". */
@@ -9,6 +13,9 @@ interface PublishedPort {
   label: string;
   /** The host address the port binds to, or undefined when none is given. */
   hostIp: string | undefined;
+  /** Published host port or range; absent when Docker assigns it at runtime. */
+  published: string | undefined;
+  protocol: string;
 }
 
 /**
@@ -17,7 +24,9 @@ interface PublishedPort {
  */
 function parseShortSyntax(raw: string): PublishedPort | null {
   const value = raw.trim();
-  const withoutProtocol = value.split("/")[0];
+  const slash = value.lastIndexOf("/");
+  const withoutProtocol = slash === -1 ? value : value.slice(0, slash);
+  const protocol = slash === -1 ? "tcp" : value.slice(slash + 1).toLowerCase();
 
   // An IPv6 address is bracketed: [::1]:8080:80
   if (withoutProtocol.startsWith("[")) {
@@ -25,15 +34,41 @@ function parseShortSyntax(raw: string): PublishedPort | null {
     if (closing === -1) return null;
     const hostIp = withoutProtocol.slice(1, closing);
     const rest = withoutProtocol.slice(closing + 1).replace(/^:/, "");
-    // Without a host port there is nothing published on the host.
+    // Compose requires an explicit host port when an IP address is present.
     if (!rest.includes(":")) return null;
-    return { label: value, hostIp };
+    return {
+      label: value,
+      hostIp,
+      published: rest.split(":")[0],
+      protocol,
+    };
   }
 
   const parts = withoutProtocol.split(":");
-  if (parts.length === 1) return null; // container port only
-  if (parts.length === 2) return { label: value, hostIp: undefined };
-  return { label: value, hostIp: parts.slice(0, -2).join(":") };
+  // With only the container port, Docker assigns a host port at runtime and
+  // still binds it to every interface by default.
+  if (parts.length === 1) {
+    return {
+      label: value,
+      hostIp: undefined,
+      published: undefined,
+      protocol,
+    };
+  }
+  if (parts.length === 2) {
+    return {
+      label: value,
+      hostIp: undefined,
+      published: parts[0],
+      protocol,
+    };
+  }
+  return {
+    label: value,
+    hostIp: parts.slice(0, -2).join(":"),
+    published: parts.at(-2),
+    protocol,
+  };
 }
 
 /** Reads the long syntax: `{ target, published, host_ip, ... }`. */
@@ -45,7 +80,23 @@ function parseLongSyntax(entry: Record<string, unknown>): PublishedPort | null {
   return {
     label: String(published),
     hostIp: typeof hostIp === "string" ? hostIp : undefined,
+    published: String(published),
+    protocol:
+      typeof entry.protocol === "string" ? entry.protocol.toLowerCase() : "tcp",
   };
+}
+
+function isAllowed(
+  allowances: readonly PublishedPortAllowance[],
+  service: string,
+  port: PublishedPort,
+): boolean {
+  if (port.published === undefined) return false;
+  const key = `${port.published}/${port.protocol}`.toLowerCase();
+  return allowances.some(
+    (allowance) =>
+      allowance.service === service && allowance.published.includes(key),
+  );
 }
 
 /**
@@ -59,9 +110,12 @@ export const noUnboundPorts: Rule = {
     description: "Published ports should be bound to a specific interface",
     fixable: false,
     defaultSeverity: "warn",
+    options: { allow: "published-port-allowances" },
   },
   create(context: RuleContext) {
     const document = context.document;
+    const allowances =
+      (context.options.allow as PublishedPortAllowance[] | undefined) ?? [];
 
     for (const name of document.getMergedServiceNames()) {
       const ports = document.getMergedServiceValue(name, "ports");
@@ -69,8 +123,8 @@ export const noUnboundPorts: Rule = {
 
       ports.forEach((entry, index) => {
         let port: PublishedPort | null = null;
-        if (typeof entry === "string") {
-          port = parseShortSyntax(entry);
+        if (typeof entry === "string" || typeof entry === "number") {
+          port = parseShortSyntax(String(entry));
         } else if (typeof entry === "object" && entry !== null) {
           port = parseLongSyntax(entry as Record<string, unknown>);
         }
@@ -79,6 +133,7 @@ export const noUnboundPorts: Rule = {
         if (port.hostIp !== undefined && !WILDCARD_HOSTS.has(port.hostIp)) {
           return;
         }
+        if (isAllowed(allowances, name, port)) return;
 
         reportServiceValue(
           context,

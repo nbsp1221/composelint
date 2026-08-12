@@ -27,7 +27,18 @@ Every glob in the configuration is resolved **relative to the configuration file
 {
   "preset": "recommended",
   "rules": {
-    "no-unbound-ports": "error",
+    "no-unbound-ports": [
+      "error",
+      {
+        "allow": [
+          {
+            "service": "proxy",
+            "published": ["80/tcp", "443/tcp", "443/udp"],
+            "reason": "Public ingress"
+          }
+        ]
+      }
+    ],
     "no-version-field": "off",
     "require-healthcheck": ["warn", { "exclude": ["migrate"] }],
     "image-require-tag": ["error", { "forbiddenTags": ["latest", "main"] }]
@@ -86,6 +97,9 @@ composelint: Rule "image-require-tag": option "forbiddenTags" must be an array o
 ```
 
 See the [rules index](../README.md#rules) for the options each rule takes.
+Rule-specific option shapes are documented on each rule page; for example,
+[`no-unbound-ports`](rules/no-unbound-ports.md#options) accepts structured
+allowances for intentionally public services.
 
 ## `exclude`
 

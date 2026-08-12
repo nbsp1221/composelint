@@ -95,7 +95,7 @@ Legend: 💼 error in the preset · ⚠️ warning in the preset · 🔧 fixable
 | [no-privileged](docs/rules/no-privileged.md) | security | ⚠️ | 💼 | | |
 | [no-host-network](docs/rules/no-host-network.md) | security | ⚠️ | 💼 | | |
 | [no-cap-add-all](docs/rules/no-cap-add-all.md) | security | ⚠️ | 💼 | | |
-| [no-unbound-ports](docs/rules/no-unbound-ports.md) | security | ⚠️ | 💼 | | |
+| [no-unbound-ports](docs/rules/no-unbound-ports.md) | security | ⚠️ | 💼 | | ⚙️ |
 | [image-require-tag](docs/rules/image-require-tag.md) | security | ⚠️ | 💼 | | ⚙️ |
 | [require-name](docs/rules/require-name.md) | best-practice | ⚠️ | 💼 | | |
 | [require-healthcheck](docs/rules/require-healthcheck.md) | best-practice | ⚠️ | 💼 | | ⚙️ |
