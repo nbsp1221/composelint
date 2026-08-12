@@ -9,6 +9,17 @@ the Node API may change in a minor release. Such changes are listed here.
 
 ## [Unreleased]
 
+### Added
+
+- `no-unbound-ports` accepts an `allow` option for exact, intentional public
+  host ports, matched by service name, published port and protocol.
+
+### Fixed
+
+- `no-unbound-ports` now reports the short syntax that only specifies a
+  container port, because Docker assigns and publishes a host port for it at
+  runtime rather than keeping it internal to the Compose network.
+
 ## [0.1.0] - 2026-07-29
 
 First release.

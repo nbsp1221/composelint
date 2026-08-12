@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveConfig } from "../../src/config/loader.js";
 import { messagesFor, ruleIds } from "../helpers.js";
 
 /** A one-service file whose `ports:` body is provided by the test. */
@@ -15,8 +16,16 @@ function portsFixture(ports: string): string {
 }
 
 /** no-unbound-ports messages for a `ports:` body. */
-function portMessages(ports: string): string[] {
-  return messagesFor(portsFixture(ports), "no-unbound-ports");
+function portMessages(
+  ports: string,
+  allow?: Array<{ service: string; published: string[]; reason?: string }>,
+): string[] {
+  const config = allow
+    ? resolveConfig({
+        rules: { "no-unbound-ports": ["warn", { allow }] },
+      })
+    : undefined;
+  return messagesFor(portsFixture(ports), "no-unbound-ports", config);
 }
 
 /** A one-service file with `image:` provided by the test. */
@@ -162,6 +171,10 @@ describe("no-unbound-ports published ports", () => {
     expect(portMessages('\n      - "[::]:4000:4000"')).toHaveLength(1);
   });
 
+  it("reports an IPv6 wildcard with a dynamically assigned host port", () => {
+    expect(portMessages('\n      - "[::]:4000"')).toHaveLength(1);
+  });
+
   it("reports a port range", () => {
     expect(portMessages('\n      - "8000-8010:8000-8010"')).toHaveLength(1);
   });
@@ -196,6 +209,18 @@ describe("no-unbound-ports published ports", () => {
     expect(portMessages('\n      - "[::1]:4000:4000"')).toEqual([]);
   });
 
+  it("accepts a bound IPv6 address with a dynamically assigned host port", () => {
+    expect(portMessages('\n      - "[::1]:4000"')).toEqual([]);
+  });
+
+  it("accepts an IPv4 address with a dynamically assigned host port", () => {
+    expect(portMessages('\n      - "127.0.0.1:4000"')).toEqual([]);
+  });
+
+  it("reports an IPv4 wildcard with a dynamically assigned host port", () => {
+    expect(portMessages('\n      - "0.0.0.0:4000"')).toHaveLength(1);
+  });
+
   it("accepts a bound host_ip in the long syntax", () => {
     expect(
       portMessages(
@@ -204,9 +229,9 @@ describe("no-unbound-ports published ports", () => {
     ).toEqual([]);
   });
 
-  it("ignores a container-only port", () => {
-    expect(portMessages('\n      - "3000"')).toEqual([]);
-    expect(portMessages("\n      - 3000")).toEqual([]);
+  it("reports a dynamically assigned host port", () => {
+    expect(portMessages('\n      - "3000"')).toHaveLength(1);
+    expect(portMessages("\n      - 3000")).toHaveLength(1);
   });
 
   it("ignores a long syntax entry that publishes nothing", () => {
@@ -217,6 +242,104 @@ describe("no-unbound-ports published ports", () => {
 
   it("reports the protocol form on all interfaces", () => {
     expect(portMessages('\n      - "3000:3000/udp"')).toHaveLength(1);
+  });
+});
+
+describe("no-unbound-ports allowed published ports", () => {
+  const caddy = [
+    {
+      service: "web",
+      published: ["80/tcp", "443/tcp", "443/udp"],
+      reason: "Public HTTP and HTTPS ingress",
+    },
+  ];
+
+  it("allows the exact published ports and protocols for a service", () => {
+    expect(
+      portMessages(
+        '\n      - "80:80"\n      - "443:443"\n      - "443:443/udp"',
+        caddy,
+      ),
+    ).toEqual([]);
+  });
+
+  it("matches the published host port rather than the container target", () => {
+    expect(portMessages('\n      - "443:8443"', caddy)).toEqual([]);
+    expect(portMessages('\n      - "8443:443"', caddy)).toHaveLength(1);
+  });
+
+  it("does not allow a different protocol", () => {
+    expect(
+      portMessages('\n      - "80:80/udp"', [
+        { service: "web", published: ["80/tcp"] },
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("applies the same matching to long syntax", () => {
+    expect(
+      portMessages(
+        '\n      - target: 8443\n        published: "443"\n        protocol: udp',
+        caddy,
+      ),
+    ).toEqual([]);
+  });
+
+  it("defaults a long-syntax protocol to tcp", () => {
+    expect(
+      portMessages('\n      - target: 8443\n        published: "443"', caddy),
+    ).toEqual([]);
+  });
+
+  it("matches an explicitly allowed published range", () => {
+    expect(
+      portMessages('\n      - "8000-8010:80-90"', [
+        { service: "web", published: ["8000-8010/tcp"] },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("does not allow a dynamically assigned host port", () => {
+    expect(
+      portMessages('\n      - "443/udp"', [
+        { service: "web", published: ["443/udp"] },
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it("does not let one service allowance cover another service", () => {
+    const source = portsFixture('\n      - "443:443"').replace(
+      "  web:",
+      "  proxy:",
+    );
+    const config = resolveConfig({
+      rules: { "no-unbound-ports": ["warn", { allow: caddy }] },
+    });
+    expect(messagesFor(source, "no-unbound-ports", config)).toHaveLength(1);
+  });
+
+  it("still ignores ports bound to a specific interface", () => {
+    expect(portMessages('\n      - "127.0.0.1:8443:443"', caddy)).toEqual([]);
+  });
+
+  it("allows a port inherited through an anchor", () => {
+    const source = [
+      "name: qa",
+      "x-ingress: &ingress",
+      "  ports:",
+      '    - "443:443"',
+      "services:",
+      "  web:",
+      "    <<: *ingress",
+      "    image: nginx:1.27",
+      '    healthcheck: { test: ["CMD", "true"] }',
+      "",
+    ].join("\n");
+    const config = resolveConfig({
+      rules: { "no-unbound-ports": ["warn", { allow: caddy }] },
+    });
+
+    expect(messagesFor(source, "no-unbound-ports", config)).toEqual([]);
   });
 });
 

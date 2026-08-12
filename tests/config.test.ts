@@ -356,9 +356,87 @@ describe("rule options", () => {
     expect(declared).toEqual([
       ["top-level-order", ["order"]],
       ["service-key-order", ["order"]],
+      ["no-unbound-ports", ["allow"]],
       ["image-require-tag", ["forbiddenTags"]],
       ["require-healthcheck", ["exclude"]],
     ]);
+  });
+
+  it("validates published-port allowances", () => {
+    const allow = [
+      {
+        service: "caddy",
+        published: ["80/tcp", "443/tcp", "443/UDP"],
+        reason: "Public ingress",
+      },
+    ];
+    const config = resolveConfig({
+      rules: { "no-unbound-ports": ["warn", { allow }] },
+    });
+
+    expect(config.warnings).toEqual([]);
+    expect(config.rules.get("no-unbound-ports")?.options.allow).toEqual([
+      {
+        service: "caddy",
+        published: ["80/tcp", "443/tcp", "443/udp"],
+        reason: "Public ingress",
+      },
+    ]);
+  });
+
+  it("accepts valid published port ranges and protocols", () => {
+    const config = resolveConfig({
+      rules: {
+        "no-unbound-ports": [
+          "warn",
+          {
+            allow: [
+              {
+                service: "dns",
+                published: ["8000-8010/tcp", "53/udp"],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(config.warnings).toEqual([]);
+  });
+
+  it("drops invalid published-port allowance entries", () => {
+    const entries = [
+      "caddy:443/tcp",
+      { service: "", published: ["443/tcp"] },
+      { service: " caddy ", published: ["443/tcp"] },
+      { service: "caddy", published: [] },
+      { service: "caddy", published: ["443"] },
+      { service: "caddy", published: ["0/tcp"] },
+      { service: "caddy", published: ["65536/tcp"] },
+      { service: "caddy", published: ["9000-8000/tcp"] },
+      { service: "caddy", published: ["443/http"] },
+      { service: "caddy", published: ["443/tcp"], reason: "" },
+      { service: "caddy", published: ["443/tcp"], ports: [443] },
+    ];
+    const config = resolveConfig({
+      rules: {
+        "no-unbound-ports": ["warn", { allow: entries }],
+      },
+    } as RawConfig);
+
+    expect(config.warnings).toHaveLength(entries.length);
+    expect(config.rules.get("no-unbound-ports")?.options.allow).toEqual([]);
+  });
+
+  it("rejects a non-array published-port allowlist", () => {
+    const config = resolveConfig({
+      rules: {
+        "no-unbound-ports": ["warn", { allow: { service: "caddy" } }],
+      },
+    } as RawConfig);
+
+    expect(config.warnings[0]).toContain("array of allowance objects");
+    expect(config.rules.get("no-unbound-ports")?.options).toEqual({});
   });
 
   it("uses the built-in order when none is configured", () => {
