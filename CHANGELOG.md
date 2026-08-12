@@ -9,6 +9,8 @@ the Node API may change in a minor release. Such changes are listed here.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-12
+
 ### Added
 
 - `no-unbound-ports` accepts an `allow` option for exact, intentional public
@@ -65,5 +67,6 @@ Eleven rules across four categories, all enabled by the `recommended` preset:
 The security rules are one layer, not a complete container security review. See
 [Scope of the security checks](README.md#scope-of-the-security-checks).
 
-[Unreleased]: https://github.com/nbsp1221/composelint/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nbsp1221/composelint/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/nbsp1221/composelint/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nbsp1221/composelint/releases/tag/v0.1.0

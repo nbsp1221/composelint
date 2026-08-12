@@ -244,7 +244,7 @@ describe("JSON output", () => {
 describe("json formatter", () => {
   it("produces valid JSON with summary", () => {
     const parsed = JSON.parse(formatJson([mockResult]));
-    expect(parsed.version).toBe("0.1.0");
+    expect(parsed.version).toBe("0.2.0");
     expect(parsed.files).toHaveLength(1);
     expect(parsed.summary.errors).toBe(1);
     expect(parsed.summary.warnings).toBe(1);

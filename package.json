@@ -1,6 +1,6 @@
 {
   "name": "composelint",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Linter and formatter for Docker Compose files, with key ordering, style, and security checks",
   "keywords": [
     "docker",
