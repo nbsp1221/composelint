@@ -393,7 +393,7 @@ describe("rule options", () => {
             allow: [
               {
                 service: "dns",
-                published: ["8000-8010/tcp", "53/udp"],
+                published: ["8000-8010/tcp", "53/udp", "9899/sctp"],
               },
             ],
           },
@@ -414,7 +414,7 @@ describe("rule options", () => {
       { service: "caddy", published: ["0/tcp"] },
       { service: "caddy", published: ["65536/tcp"] },
       { service: "caddy", published: ["9000-8000/tcp"] },
-      { service: "caddy", published: ["443/http"] },
+      { service: "caddy", published: ["443/1nvalid"] },
       { service: "caddy", published: ["443/tcp"], reason: "" },
       { service: "caddy", published: ["443/tcp"], ports: [443] },
     ];

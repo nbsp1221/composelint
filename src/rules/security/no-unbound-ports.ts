@@ -1,4 +1,3 @@
-import { isIP } from "node:net";
 import type {
   PublishedPortAllowance,
   Rule,
@@ -35,11 +34,8 @@ function parseShortSyntax(raw: string): PublishedPort | null {
     if (closing === -1) return null;
     const hostIp = withoutProtocol.slice(1, closing);
     const rest = withoutProtocol.slice(closing + 1).replace(/^:/, "");
-    // An address plus only the container port still asks Docker to assign a
-    // host port, but the explicit address determines which interface it uses.
-    if (!rest.includes(":")) {
-      return { label: value, hostIp, published: undefined, protocol };
-    }
+    // Compose requires an explicit host port when an IP address is present.
+    if (!rest.includes(":")) return null;
     return {
       label: value,
       hostIp,
@@ -60,14 +56,6 @@ function parseShortSyntax(raw: string): PublishedPort | null {
     };
   }
   if (parts.length === 2) {
-    if (isIP(parts[0]) !== 0 || WILDCARD_HOSTS.has(parts[0])) {
-      return {
-        label: value,
-        hostIp: parts[0],
-        published: undefined,
-        protocol,
-      };
-    }
     return {
       label: value,
       hostIp: undefined,

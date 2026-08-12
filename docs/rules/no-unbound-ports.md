@@ -120,7 +120,8 @@ An array of public host-port allowances. Each entry has:
 The service, published host port and protocol must all match. The target
 container port is deliberately not considered: `"8443:443"` is allowed by
 `"8443/tcp"`, not by `"443/tcp"`. The short and long Compose syntaxes behave
-the same, and a missing protocol means `tcp`.
+the same, and a missing protocol means `tcp`. Platform-specific protocols that
+Compose accepts, such as `sctp`, are matched the same way.
 
 Allowances are exact. An allowance for `443/tcp` does not cover `443/udp`, a
 different service, or a new port on the same service. A published range is

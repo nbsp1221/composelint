@@ -171,10 +171,6 @@ describe("no-unbound-ports published ports", () => {
     expect(portMessages('\n      - "[::]:4000:4000"')).toHaveLength(1);
   });
 
-  it("reports an IPv6 wildcard with a dynamically assigned host port", () => {
-    expect(portMessages('\n      - "[::]:4000"')).toHaveLength(1);
-  });
-
   it("reports a port range", () => {
     expect(portMessages('\n      - "8000-8010:8000-8010"')).toHaveLength(1);
   });
@@ -207,18 +203,6 @@ describe("no-unbound-ports published ports", () => {
 
   it("accepts a bracketed IPv6 address", () => {
     expect(portMessages('\n      - "[::1]:4000:4000"')).toEqual([]);
-  });
-
-  it("accepts a bound IPv6 address with a dynamically assigned host port", () => {
-    expect(portMessages('\n      - "[::1]:4000"')).toEqual([]);
-  });
-
-  it("accepts an IPv4 address with a dynamically assigned host port", () => {
-    expect(portMessages('\n      - "127.0.0.1:4000"')).toEqual([]);
-  });
-
-  it("reports an IPv4 wildcard with a dynamically assigned host port", () => {
-    expect(portMessages('\n      - "0.0.0.0:4000"')).toHaveLength(1);
   });
 
   it("accepts a bound host_ip in the long syntax", () => {
@@ -281,6 +265,17 @@ describe("no-unbound-ports allowed published ports", () => {
       portMessages(
         '\n      - target: 8443\n        published: "443"\n        protocol: udp',
         caddy,
+      ),
+    ).toEqual([]);
+  });
+
+  it("allows a platform-specific protocol in both syntaxes", () => {
+    const sctp = [{ service: "web", published: ["9899/sctp", "9900/sctp"] }];
+    expect(portMessages('\n      - "9899:9899/sctp"', sctp)).toEqual([]);
+    expect(
+      portMessages(
+        '\n      - target: 9900\n        published: "9900"\n        protocol: sctp',
+        sctp,
       ),
     ).toEqual([]);
   });

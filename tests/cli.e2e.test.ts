@@ -326,6 +326,11 @@ describe("configuration", () => {
       "    ports:",
       '      - "5432:5432"',
       '    healthcheck: { test: ["CMD", "true"] }',
+      "  telecom:",
+      "    image: alpine:3.22",
+      "    ports:",
+      '      - "9899:9899/sctp"',
+      '    healthcheck: { test: ["CMD", "true"] }',
       "",
     ].join("\n");
     const dir = await workspace({
@@ -340,6 +345,11 @@ describe("configuration", () => {
                   service: "caddy",
                   published: ["80/tcp", "443/tcp", "443/udp"],
                   reason: "Public ingress",
+                },
+                {
+                  service: "telecom",
+                  published: ["9899/sctp"],
+                  reason: "Public SCTP endpoint",
                 },
               ],
             },

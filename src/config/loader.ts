@@ -245,7 +245,8 @@ function isStringArray(value: unknown): value is string[] {
   );
 }
 
-const PUBLISHED_PORT = /^(\d+)(?:-(\d+))?\/(tcp|udp)$/i;
+/** Compose permits platform-specific protocols in addition to TCP and UDP. */
+const PUBLISHED_PORT = /^(\d+)(?:-(\d+))?\/([a-z][a-z0-9+.-]*)$/i;
 
 function isValidPublishedPort(value: string): boolean {
   const match = PUBLISHED_PORT.exec(value);
