@@ -1,14 +1,6 @@
 import type { Rule, RuleContext } from "../../core/types.js";
-import { DEFAULT_TOP_LEVEL_ORDER } from "./key-order.js";
+import { DEFAULT_TOP_LEVEL_ORDER, schemaTopLevelKeys } from "./key-order.js";
 import { buildReorderEdits, expectedOrder } from "./ordering.js";
-
-/**
- * Keys that are not ordered: `x-*` extension fields may appear anywhere, and
- * `version` is obsolete, so no-version-field asks for its removal instead of a position.
- */
-function isPinned(key: string): boolean {
-  return key.startsWith("x-") || key === "version";
-}
 
 export const topLevelOrder: Rule = {
   meta: {
@@ -23,6 +15,11 @@ export const topLevelOrder: Rule = {
     const order =
       (context.options.order as string[] | undefined) ??
       DEFAULT_TOP_LEVEL_ORDER;
+    // `x-*`, obsolete `version`, and schema-undefined keys are pinned.
+    // Reordering keeps the pinned entries together in source order while it
+    // reorders only schema-defined keys.
+    const isPinned = (key: string): boolean =>
+      key.startsWith("x-") || key === "version" || !schemaTopLevelKeys.has(key);
     const root = context.document.root;
     if (!root) return;
 

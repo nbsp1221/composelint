@@ -9,6 +9,12 @@ the Node API may change in a minor release. Such changes are listed here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `service-key-order` and `top-level-order` no longer report keys the Compose
+  Specification does not define, and `--fix` no longer moves them: such keys
+  have no meaningful position, and `spec-schema` already reports them.
+
 ## [0.2.0] - 2026-08-12
 
 ### Added

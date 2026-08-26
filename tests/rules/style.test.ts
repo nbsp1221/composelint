@@ -97,6 +97,123 @@ describe("no-version-field no-version-field", () => {
   });
 });
 
+describe("service-key-order schema-undefined keys", () => {
+  it("reports an undefined key only through spec-schema", () => {
+    const diagnostics = lint(
+      "services:\n  app:\n    image: nginx:1.29\n    restartt: unless-stopped\n    ports:\n      - '8080:80'\n",
+    ).diagnostics;
+    expect(diagnostics.filter((d) => d.ruleId === "spec-schema")).toHaveLength(
+      1,
+    );
+    expect(
+      diagnostics.filter((d) => d.ruleId === "service-key-order"),
+    ).toHaveLength(0);
+  });
+
+  it("leaves such a key in place when the rest is in order", () => {
+    const source =
+      "services:\n  app:\n    image: nginx:1.29\n    restartt: unless-stopped\n    ports:\n      - '8080:80'\n";
+    expect(fixSource(source).changed).toBe(false);
+  });
+
+  it("still checks keys the specification defines, around an undefined key", () => {
+    const source =
+      "services:\n  app:\n    image: nginx:1.29\n    restartt: x\n    ports:\n      - '8080:80'\n    container_name: app\n";
+    expect(ruleIds(source)).toContain("service-key-order");
+    expect(
+      messagesFor(source, "service-key-order").some((m) =>
+        m.includes("restartt"),
+      ),
+    ).toBe(false);
+  });
+
+  it("fix moves the defined keys only and keeps the undefined one pinned", () => {
+    const source =
+      "services:\n  app:\n    image: nginx:1.29\n    restartt: x\n    ports:\n      - '8080:80'\n    container_name: app\n";
+    const { source: fixed } = fixSource(source);
+    expect(fixed).toBe(
+      "services:\n  app:\n    restartt: x\n    image: nginx:1.29\n    container_name: app\n    ports:\n      - '8080:80'\n",
+    );
+  });
+
+  it("keeps several undefined keys in their relative order on fix", () => {
+    const source =
+      "services:\n  app:\n    restartt: x\n    image: nginx:1.29\n    foo: 1\n    ports:\n      - '8080:80'\n    container_name: app\n";
+    const { source: fixed } = fixSource(source);
+    expect(fixed).toBe(
+      "services:\n  app:\n    restartt: x\n    foo: 1\n    image: nginx:1.29\n    container_name: app\n    ports:\n      - '8080:80'\n",
+    );
+  });
+
+  it("does not report a flow-mapping service whose defined keys surround an undefined one", () => {
+    expect(
+      ruleIds(
+        "services:\n  app: { image: nginx:1.29, restartt: x, ports: ['80:80'] }\n",
+      ),
+    ).not.toContain("service-key-order");
+  });
+
+  it("does not report a service whose undefined key is the only one out of place", () => {
+    expect(
+      ruleIds("services:\n  app:\n    image: nginx:1.29\n    restartt: 'x'\n"),
+    ).not.toContain("service-key-order");
+  });
+});
+
+describe("top-level-order schema-undefined keys", () => {
+  it("reports an undefined key only through spec-schema", () => {
+    const diagnostics = lint(
+      "name: demo\nfoo: 1\nservices:\n  app:\n    image: nginx:1.29\n",
+    ).diagnostics;
+    expect(diagnostics.filter((d) => d.ruleId === "spec-schema")).toHaveLength(
+      1,
+    );
+    expect(
+      diagnostics.filter((d) => d.ruleId === "top-level-order"),
+    ).toHaveLength(0);
+  });
+
+  it("still checks defined top-level keys around an undefined one", () => {
+    expect(
+      ruleIds("foo: 1\nservices:\n  app:\n    image: nginx:1.29\nname: demo\n"),
+    ).toContain("top-level-order");
+  });
+
+  it("fix keeps the undefined key pinned at the top", () => {
+    const { source: fixed } = fixSource(
+      "foo: 1\nservices:\n  app:\n    image: nginx:1.29\nname: demo\n",
+    );
+    expect(fixed).toBe(
+      "foo: 1\nname: demo\nservices:\n  app:\n    image: nginx:1.29\n",
+    );
+  });
+});
+
+describe("order option and schema-undefined keys", () => {
+  it("an option order cannot order a key the specification does not define", () => {
+    const config = resolveConfig({
+      rules: {
+        "service-key-order": ["warn", { order: ["restartt", "image"] }],
+      },
+    });
+    const source =
+      "services:\n  app:\n    restartt: x\n    image: nginx:1.29\n";
+    expect(ruleIds(source, config)).not.toContain("service-key-order");
+  });
+
+  it("a schema key missing from an option order still sorts last", () => {
+    const config = resolveConfig({
+      rules: { "service-key-order": ["warn", { order: ["ports"] }] },
+    });
+    const source =
+      "services:\n  app:\n    image: nginx:1.29\n    ports:\n      - '80:80'\n";
+    expect(ruleIds(source, config)).toContain("service-key-order");
+    expect(messagesFor(source, "service-key-order", config)).toEqual([
+      'Service "app": key "image" is out of order (expected "ports" at position 1)',
+    ]);
+  });
+});
+
 describe("key order coverage", () => {
   it("places every service key the specification defines", () => {
     const missing = schemaKeys("service").filter(
