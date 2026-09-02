@@ -9,6 +9,10 @@ the Node API may change in a minor release. Such changes are listed here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `service-key-order` and `top-level-order` no longer treat keys the Compose Specification does not define as ordering candidates. `spec-schema` remains their sole reporter; if recognized keys trigger a fix, undefined entries follow the existing pinned-key behavior and retain their relative order.
+
 ## [0.2.0] - 2026-08-12
 
 ### Added

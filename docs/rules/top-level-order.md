@@ -19,10 +19,11 @@ name → include → services → networks → volumes → configs → secrets �
 
 `services` comes first among the content blocks, then the resources they reference, in the order the [Compose reference](https://docs.docker.com/reference/compose-file/) documents them.
 
-Two kinds of keys are left where they are:
+The following keys do not participate in ordering comparisons. When `--fix` reorders other keys, they form a pinned group before the ordered keys and keep their original relative order:
 
 - `x-*` extension fields, which may appear anywhere.
 - `version`, which is obsolete. [`no-version-field`](no-version-field.md) asks for its removal, so this rule does not also give it a position.
+- Keys the Compose Specification does not define. An invalid key has no meaningful position, [`spec-schema`](spec-schema.md) already reports it, and an `order` option cannot change this — listing a key does not make it real.
 
 ## Why it matters
 
