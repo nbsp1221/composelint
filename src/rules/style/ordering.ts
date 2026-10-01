@@ -7,15 +7,15 @@ import {
 } from "../../core/text-edit.js";
 import type { TextEdit } from "../../core/types.js";
 
-/** Position of a key in the configured order; unknown keys sort last. */
+/** Position of a key in the configured order; omitted keys sort last. */
 function orderIndex(key: string, order: readonly string[]): number {
   const index = order.indexOf(key);
   return index === -1 ? order.length : index;
 }
 
 /**
- * The expected key sequence: known keys in the configured order, then keys the
- * order does not mention, keeping their relative positions.
+ * The expected key sequence: keys mentioned in the configured order first,
+ * followed by keys the order omits, keeping their relative positions.
  */
 export function expectedOrder(
   keys: readonly string[],

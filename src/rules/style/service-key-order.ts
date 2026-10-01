@@ -1,11 +1,6 @@
 import type { Rule, RuleContext } from "../../core/types.js";
-import { DEFAULT_SERVICE_KEY_ORDER } from "./key-order.js";
+import { DEFAULT_SERVICE_KEY_ORDER, schemaServiceKeys } from "./key-order.js";
 import { buildReorderEdits, expectedOrder } from "./ordering.js";
-
-/** Merge keys and `x-*` extensions may appear anywhere within a service. */
-function isPinned(key: string): boolean {
-  return key === "<<" || key.startsWith("x-");
-}
 
 export const serviceKeyOrder: Rule = {
   meta: {
@@ -20,6 +15,11 @@ export const serviceKeyOrder: Rule = {
     const order =
       (context.options.order as string[] | undefined) ??
       DEFAULT_SERVICE_KEY_ORDER;
+    // Merge keys, `x-*` extensions, and schema-undefined keys are pinned.
+    // Reordering keeps the pinned entries together in source order while it
+    // reorders only schema-defined keys.
+    const isPinned = (key: string): boolean =>
+      key === "<<" || key.startsWith("x-") || !schemaServiceKeys.has(key);
     const servicesMap = context.document.getServicesMap();
     if (!servicesMap) return;
 
