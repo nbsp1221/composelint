@@ -1,3 +1,7 @@
+import composeSpecSchema from "../../../schemas/compose-spec.json" with {
+  type: "json",
+};
+
 /**
  * The canonical key order for a service, expressed as logical groups.
  *
@@ -9,8 +13,9 @@
  * - dclint groups Compose keys by purpose and documents the rationale, which is
  *   what makes an ordering opinion reviewable rather than arbitrary.
  *
- * Keys the specification does not define (and future keys not yet placed here)
- * keep their relative order after the known keys.
+ * Every currently defined key appears here once. Keys outside the schema are
+ * not given an ordering slot; the rules keep them in the pinned group and
+ * preserve their relative order during fixes.
  */
 export const SERVICE_KEY_GROUPS = {
   /** What this service inherits from, before anything it defines itself. */
@@ -165,3 +170,28 @@ export const DEFAULT_TOP_LEVEL_ORDER: string[] = [
   "secrets",
   "models",
 ];
+
+/**
+ * The key names the vendored Compose Specification defines, read straight from
+ * the schema rather than duplicated here: the schema is the single source of
+ * truth, and `pnpm schema:update` keeps it current.
+ *
+ * The ordering rules use these sets to distinguish a schema key omitted from
+ * an `order` option (still ordered, after configured keys) from a key absent
+ * from the schema (pinned, because spec-schema reports it).
+ */
+function schemaKeySet(pointer: "service" | "top"): ReadonlySet<string> {
+  const schema = composeSpecSchema as {
+    properties: Record<string, unknown>;
+    $defs: { service: { properties: Record<string, unknown> } };
+  };
+  const properties =
+    pointer === "service" ? schema.$defs.service.properties : schema.properties;
+  return new Set(Object.keys(properties));
+}
+
+/** Service keys the specification defines. */
+export const schemaServiceKeys: ReadonlySet<string> = schemaKeySet("service");
+
+/** Top-level keys the specification defines. */
+export const schemaTopLevelKeys: ReadonlySet<string> = schemaKeySet("top");

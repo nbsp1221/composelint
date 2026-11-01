@@ -27,7 +27,7 @@ Checks that the keys of every service appear in a fixed order. All 93 service ke
 | Security | `privileged`, `read_only`, `cap_add`, `cap_drop`, `security_opt`, `sysctls`, `userns_mode`, `use_api_socket`, `ipc`, `pid`, `uts`, `isolation`, `runtime` |
 | Development | `develop` |
 
-Merge keys (`<<`) and `x-*` extension fields are left where they are.
+Merge keys (`<<`), `x-*` extension fields, and keys the Compose Specification does not define are pinned. They do not participate in ordering comparisons; when `--fix` reorders known keys, pinned entries stay together in their original relative order. An invalid key has no meaningful position, [`spec-schema`](spec-schema.md) already reports it, and an `order` option cannot change this — listing a key does not make it real.
 
 ## Why it matters
 
