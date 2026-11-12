@@ -213,15 +213,51 @@ describe("no-unbound-ports published ports", () => {
     ).toEqual([]);
   });
 
-  it("reports a dynamically assigned host port", () => {
-    expect(portMessages('\n      - "3000"')).toHaveLength(1);
-    expect(portMessages("\n      - 3000")).toHaveLength(1);
+  it.each([
+    "80",
+    '"80"',
+    "{target: 80}",
+    "{target: 80, mode: host}",
+    '"0:80"',
+    '{target: 80, published: "0"}',
+  ])(
+    "reports a dynamically assigned port for %s without using its target as an allowance",
+    (entry) => {
+      expect(
+        portMessages(`\n      - ${entry}`, [
+          { service: "web", published: ["80/tcp"] },
+        ]),
+      ).toEqual([
+        'Service "web": container port "80" gets a dynamically assigned host port on all interfaces (0.0.0.0)',
+      ]);
+    },
+  );
+
+  it.each([
+    '"127.0.0.1::80"',
+    '"[::1]::80"',
+    '{target: 80, host_ip: "127.0.0.1"}',
+    '{target: 80, host_ip: "::1"}',
+  ])("ignores dynamic ports bound to loopback in %s", (entry) => {
+    expect(portMessages(`\n      - ${entry}`)).toEqual([]);
   });
 
-  it("ignores a long syntax entry that publishes nothing", () => {
-    expect(portMessages("\n      - target: 80\n        mode: host")).toEqual(
-      [],
-    );
+  it.each(['"[::]::80"', '{target: 80, host_ip: "::"}'])(
+    "reports dynamic IPv6 wildcard bindings for %s",
+    (entry) => {
+      expect(portMessages(`\n      - ${entry}`)).toEqual([
+        'Service "web": container port "80" gets a dynamically assigned host port on all interfaces (::)',
+      ]);
+    },
+  );
+
+  it("ignores expose without ports", () => {
+    expect(
+      messagesFor(
+        "services:\n  web:\n    image: nginx:1\n    expose: [80]\n",
+        "no-unbound-ports",
+      ),
+    ).toEqual([]);
   });
 
   it("reports the protocol form on all interfaces", () => {

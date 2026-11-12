@@ -183,6 +183,22 @@ describe("output formats", () => {
 });
 
 describe("--fix", () => {
+  it.each(["json", "sarif"])(
+    "keeps --fix %s output parseable",
+    async (format) => {
+      const source = "services: {}\nname: qa\n";
+      const dir = await workspace({ "compose.yaml": source });
+      const result = await cliRun(dir, ["--fix", "--format", format]);
+      expect(JSON.parse(result.stdout)).toHaveProperty(
+        format === "json" ? "files" : "runs",
+      );
+      expect(result.stderr).toContain("Fixed 1 file");
+      expect(await readFile(join(dir, "compose.yaml"), "utf-8")).toBe(
+        "name: qa\nservices: {}\n",
+      );
+    },
+  );
+
   it("rewrites the file, is idempotent, and keeps CRLF", async () => {
     const crlf = [
       "name: qa",

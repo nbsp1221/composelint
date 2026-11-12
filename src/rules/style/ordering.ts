@@ -7,7 +7,7 @@ import {
 } from "../../core/text-edit.js";
 import type { TextEdit } from "../../core/types.js";
 
-/** Position of a key in the configured order; unknown keys sort last. */
+/** Position of a key in the configured order; omitted keys sort last. */
 function orderIndex(key: string, order: readonly string[]): number {
   const index = order.indexOf(key);
   return index === -1 ? order.length : index;
@@ -42,7 +42,8 @@ function itemRangeOf(pair: Pair): ItemRange | null {
 
 /**
  * Builds the edits that reorder `map` so that its orderable keys follow
- * `expected`, keeping position-independent keys (`x-*`, `<<`) at the top.
+ * `expected`, keeping position-independent keys (`x-*`, `<<`) at the top
+ * and schema-undefined keys in their original slots.
  *
  * Returns null when the mapping cannot be rewritten as whole lines, which is
  * the case for flow mappings such as `web: {image: nginx, ports: []}`.
@@ -51,6 +52,7 @@ export function buildReorderEdits(
   document: ComposeDocument,
   map: YAMLMap,
   isPinned: (key: string) => boolean,
+  isIgnored: (key: string) => boolean,
   expected: readonly string[],
   options: ReorderOptions = {},
 ): TextEdit[] | null {
@@ -64,10 +66,15 @@ export function buildReorderEdits(
   }
 
   const pinnedIndices: number[] = [];
+  const ignoredIndices = new Set<number>();
   const remaining = new Map<string, number[]>();
 
   map.items.forEach((pair, index) => {
     const key = document.pairKeyName(pair);
+    if (isIgnored(key)) {
+      ignoredIndices.add(index);
+      return;
+    }
     if (isPinned(key)) {
       pinnedIndices.push(index);
       return;
@@ -86,7 +93,10 @@ export function buildReorderEdits(
     orderedIndices.push(index);
   }
 
-  if (orderedIndices.length !== items.length) return null;
-
-  return reorderEntries(document.source, items, orderedIndices, options);
+  if (orderedIndices.length + ignoredIndices.size !== items.length) return null;
+  let orderedIndex = 0;
+  const order = items.map((_, index) =>
+    ignoredIndices.has(index) ? index : orderedIndices[orderedIndex++],
+  );
+  return reorderEntries(document.source, items, order, options);
 }

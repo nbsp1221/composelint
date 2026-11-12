@@ -9,6 +9,17 @@ the Node API may change in a minor release. Such changes are listed here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep inherited `ports` and `cap_add` entries when a same-file `extends`
+  child declares its own list, and point inherited warnings at `extends`.
+- Report dynamically assigned host ports in both syntaxes, and describe
+  `cap_add: [ALL]` separately from privileged mode.
+- Leave unknown service and top-level keys to schema validation while ordering
+  recognized keys around them.
+- Keep JSON and SARIF output parseable with `--fix`, and reject inherited
+  property names in preset and rule option validation.
+
 ## [0.2.0] - 2026-08-12
 
 ### Added

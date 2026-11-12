@@ -7,7 +7,7 @@
 Linter and formatter for Docker Compose files, with key ordering, style, and security checks.
 
 - **Validates against the Compose Specification.** The official JSON schema is vendored, so unknown keys and wrong value types are caught at every level, not just at the top.
-- **Understands inheritance.** `<<: *anchor`, `extends`, `include:` and override files are resolved before rules run, so a setting hidden behind an anchor is still checked.
+- **Checks local inheritance.** Rules see YAML merge keys and same-file `extends`, including inherited ports and added capabilities. [Included and override files](docs/configuration.md#partials) are linted separately. External `extends` targets are outside the file being checked.
 - **Fixes without churn.** `--fix` edits the original text instead of re-serializing the document: comments, quoting style, line wrapping and CRLF endings survive untouched.
 - **Fits a pipeline.** Stylish, JSON, GitHub annotation and SARIF output; `--max-warnings` for a gate; documented exit codes.
 

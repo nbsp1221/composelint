@@ -177,11 +177,22 @@ describe("resolveConfig", () => {
     expect(config.warnings[0]).toContain("invalid severity");
   });
 
-  it("warns about an unknown preset and falls back to recommended", () => {
-    const config = resolveConfig({}, "everything" as "strict");
-    expect(config.rules.get("no-version-field")?.severity).toBe("error");
-    expect(config.rules.get("top-level-order")?.severity).toBe("warn");
-    expect(config.warnings[0]).toContain('Unknown preset "everything"');
+  it.each(["everything", "constructor", "toString", "__proto__"])(
+    "warns about unknown preset %s and falls back to recommended",
+    (preset) => {
+      const config = resolveConfig({}, preset as "strict");
+      expect(config.rules.get("no-version-field")?.severity).toBe("error");
+      expect(config.rules.get("top-level-order")?.severity).toBe("warn");
+      expect(config.warnings[0]).toContain(`Unknown preset "${preset}"`);
+    },
+  );
+
+  it("rejects inherited property names as rule options", () => {
+    const config = resolveConfig({
+      rules: { "top-level-order": ["error", { constructor: true }] },
+    });
+    expect(config.rules.get("top-level-order")?.options).toEqual({});
+    expect(config.warnings[0]).toContain('unknown option "constructor"');
   });
 });
 

@@ -8,6 +8,7 @@ import {
   visit,
   type YAMLMap,
 } from "yaml";
+import { portIdentity } from "./ports.js";
 import type { SourcePosition, SourceRange } from "./types.js";
 
 /** A node that a diagnostic can point at. */
@@ -19,6 +20,48 @@ export interface ServiceReportTarget {
   node: RangedNode;
   /** True when the reported value is not written in the service itself. */
   inherited: boolean;
+}
+
+interface ResolvedService {
+  value: Record<string, unknown>;
+  localIndices?: Map<string, Array<number | null>>;
+}
+
+const EXTENDED_SEQUENCES = ["ports", "cap_add"] as const;
+
+function extendService(
+  base: Record<string, unknown>,
+  local: Record<string, unknown>,
+  replacesSequence: (key: string) => boolean,
+): ResolvedService {
+  const value = { ...base, ...local };
+  const localIndices = new Map<string, Array<number | null>>();
+  for (const key of EXTENDED_SEQUENCES) {
+    const parent = base[key];
+    const child = local[key];
+    if (
+      !Array.isArray(parent) ||
+      !Array.isArray(child) ||
+      replacesSequence(key)
+    ) {
+      continue;
+    }
+
+    const entries = new Map<unknown, { item: unknown; index: number | null }>();
+    const identity = key === "ports" ? portIdentity : (item: unknown) => item;
+    for (const item of parent) {
+      entries.set(identity(item), { item, index: null });
+    }
+    for (const [index, item] of child.entries()) {
+      entries.set(identity(item), { item, index });
+    }
+    value[key] = Array.from(entries.values(), ({ item }) => item);
+    localIndices.set(
+      key,
+      Array.from(entries.values(), ({ index }) => index),
+    );
+  }
+  return { value, localIndices };
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -63,7 +106,7 @@ export class ComposeDocument {
   #dataError: unknown;
 
   /** Services with `extends` chains resolved, built on first use. */
-  #resolved: Map<string, Record<string, unknown>> | undefined;
+  #resolved: Map<string, ResolvedService> | undefined;
 
   /** Services whose definition partly lives in another file. */
   readonly #externalExtends = new Set<string>();
@@ -128,11 +171,11 @@ export class ComposeDocument {
 
   /**
    * One service as plain data: everything it inherits through merge keys plus
-   * anything it takes from a service it `extends` in this same file. Keys
-   * written in the service itself win, which is what Compose does.
+   * anything it takes from a service it `extends` in this same file. Ports
+   * and added capabilities combine; other local keys take precedence.
    */
   getMergedService(name: string): Record<string, unknown> | null {
-    return this.#resolvedServices().get(name) ?? null;
+    return this.#resolvedServices().get(name)?.value ?? null;
   }
 
   /**
@@ -145,10 +188,10 @@ export class ComposeDocument {
   }
 
   /** Resolves `extends` chains within this document, once per document. */
-  #resolvedServices(): Map<string, Record<string, unknown>> {
+  #resolvedServices(): Map<string, ResolvedService> {
     if (this.#resolved) return this.#resolved;
 
-    const resolved = new Map<string, Record<string, unknown>>();
+    const resolved = new Map<string, ResolvedService>();
     this.#resolved = resolved;
 
     const services = this.getMergedServices();
@@ -157,26 +200,43 @@ export class ComposeDocument {
     const resolve = (
       name: string,
       seen: ReadonlySet<string>,
-    ): Record<string, unknown> | null => {
+    ): ResolvedService | null => {
+      if (!Object.hasOwn(services, name)) return null;
       const raw = services[name];
       if (!isPlainRecord(raw)) return null;
 
+      const tag = (key: string) => this.getTagAtPath(["services", name, key]);
+      let value = raw;
+      for (const key of EXTENDED_SEQUENCES) {
+        if (Object.hasOwn(raw, key) && tag(key) === "!reset") {
+          value = { ...value, [key]: undefined };
+        }
+      }
+      const local = { value };
       const target = extendsTarget(raw);
-      if (target === null) return raw;
+      if (target === null) return local;
 
       if (target.file !== undefined) {
         this.#externalExtends.add(name);
-        return raw;
+        return local;
       }
 
       // A cycle is invalid Compose; stop rather than recurse forever.
-      if (target.service === undefined || seen.has(target.service)) return raw;
+      if (
+        target.service === undefined ||
+        target.service === name ||
+        seen.has(target.service)
+      ) {
+        return local;
+      }
 
       const base = resolve(target.service, new Set([...seen, name]));
       if (this.#externalExtends.has(target.service)) {
         this.#externalExtends.add(name);
       }
-      return base ? { ...base, ...raw } : raw;
+      return base
+        ? extendService(base.value, value, (key) => tag(key) === "!override")
+        : local;
     };
 
     for (const name of Object.keys(services)) {
@@ -244,8 +304,37 @@ export class ComposeDocument {
     name: string,
     path: ReadonlyArray<string | number> = [],
   ): ServiceReportTarget {
-    const direct = this.getNodeAtPath(["services", name, ...path]);
-    if (hasRange(direct)) return { node: direct, inherited: false };
+    const [key, index, ...rest] = path;
+    const service = this.#resolvedServices().get(name);
+    const localIndex =
+      typeof key === "string" && typeof index === "number"
+        ? service?.localIndices?.get(key)?.[index]
+        : undefined;
+    const raw = this.getMergedServices()?.[name];
+    const fromExtends =
+      localIndex === null ||
+      (typeof key === "string" &&
+        service !== undefined &&
+        Object.hasOwn(service.value, key) &&
+        isPlainRecord(raw) &&
+        !Object.hasOwn(raw, key));
+
+    if (fromExtends) {
+      const node = this.getKeyNodeAtPath(["services", name], "extends");
+      if (hasRange(node)) return { node, inherited: true };
+    } else {
+      const directPath =
+        typeof localIndex === "number" ? [key, localIndex, ...rest] : path;
+      const direct = this.getNodeAtPath(["services", name, ...directPath]);
+      if (hasRange(direct)) return { node: direct, inherited: false };
+
+      if (typeof key === "string" && typeof index === "number") {
+        const alias = this.getNodeAtPath(["services", name, key]);
+        if (isAlias(alias) && hasRange(alias)) {
+          return { node: alias, inherited: true };
+        }
+      }
+    }
 
     const mergeNode = this.getServiceMergeNode(name);
     if (hasRange(mergeNode)) return { node: mergeNode, inherited: true };

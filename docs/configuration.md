@@ -132,7 +132,12 @@ Every other rule still runs, so an override file that publishes a port on all in
 Two kinds of partial files are recognised **without configuration**:
 
 - Files matching the Compose override convention: `**/*.override.yaml`, `**/*.override.yml`.
-- Files referenced from a top-level `include:` in any Compose file in the project. The string form, the `path:` object form and a `path:` list are all followed, including relative paths such as `../shared/base.yaml`.
+- Files selected for linting whose paths appear in a top-level `include:` in a scanned Compose file. The CLI recognizes string entries, `path:` objects, and `path:` lists, with relative paths resolved from the declaring file.
+
+The CLI lints each selected file separately. It uses `include:` references to
+identify partials and does not add targets to the lint run or combine files into
+a project. Same-file `extends` combines `ports` and `cap_add` and otherwise
+prefers local keys. The linter does not load external `extends` targets.
 
 Use `partials` for fragments whose names follow neither convention:
 

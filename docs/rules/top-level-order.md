@@ -19,10 +19,11 @@ name → include → services → networks → volumes → configs → secrets �
 
 `services` comes first among the content blocks, then the resources they reference, in the order the [Compose reference](https://docs.docker.com/reference/compose-file/) documents them.
 
-Two kinds of keys are left where they are:
+The following keys do not participate in ordering checks:
 
 - `x-*` extension fields, which may appear anywhere.
 - `version`, which is obsolete. [`no-version-field`](no-version-field.md) asks for its removal, so this rule does not also give it a position.
+- Unknown keys, which [`spec-schema`](spec-schema.md) reports. They keep their slot when `--fix` reorders known keys.
 
 ## Why it matters
 

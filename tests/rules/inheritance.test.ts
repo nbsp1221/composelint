@@ -125,6 +125,157 @@ describe("local values win over inherited ones", () => {
   });
 });
 
+describe("security sequences in same-file extends", () => {
+  const source = `services:
+  base:
+    image: nginx:1
+    ports: ["8080:80", "8081:81"]
+    cap_add: [ALL, NET_ADMIN]
+    privileged: true
+  child:
+    extends: {service: base}
+    ports:
+      - {target: 80, published: "8080"}
+      - "8082:82"
+    cap_add: [NET_ADMIN, SYS_PTRACE]
+    privileged: false
+  grandchild:
+    extends: child
+    ports:
+      - "8083:83"
+    cap_add: [SYS_CHROOT]
+`;
+
+  it("keeps parent-first order, removes duplicates and preserves scalar overrides", () => {
+    const { document } = lint(source);
+    expect(document.getMergedServiceValue("base", "ports")).toEqual([
+      "8080:80",
+      "8081:81",
+    ]);
+    expect(document.getMergedServiceValue("grandchild", "ports")).toEqual([
+      { target: 80, published: "8080" },
+      "8081:81",
+      "8082:82",
+      "8083:83",
+    ]);
+    expect(document.getMergedServiceValue("grandchild", "cap_add")).toEqual([
+      "ALL",
+      "NET_ADMIN",
+      "SYS_PTRACE",
+      "SYS_CHROOT",
+    ]);
+    expect(ruleIdsFor(source, "child")).not.toContain("no-privileged");
+    expect(ruleIdsFor(source, "grandchild")).not.toContain("no-privileged");
+  });
+
+  it.each([
+    [
+      "child",
+      [
+        [10, 9, false],
+        [8, 5, true],
+        [11, 9, false],
+      ],
+      8,
+    ],
+    [
+      "grandchild",
+      [
+        [15, 5, true],
+        [15, 5, true],
+        [15, 5, true],
+        [17, 9, false],
+      ],
+      15,
+    ],
+  ])(
+    "reports the correct sequence locations for %s",
+    (name, ports, extendsLine) => {
+      const diagnostics = diagnosticsFor(source, name);
+      expect(
+        diagnostics
+          .filter(({ ruleId }) => ruleId === "no-unbound-ports")
+          .map(({ range, message, fix }) => {
+            expect(fix).toBeUndefined();
+            return [
+              range.start.line,
+              range.start.column,
+              message.endsWith("(inherited)"),
+            ];
+          }),
+      ).toEqual(ports);
+      expect(
+        diagnostics.find(({ ruleId }) => ruleId === "no-cap-add-all"),
+      ).toMatchObject({
+        message: `Service "${name}": cap_add includes ALL Linux capabilities (inherited)`,
+        range: { start: { line: extendsLine, column: 5 } },
+      });
+    },
+  );
+
+  it("distinguishes the extends key from a local YAML merge", () => {
+    const yaml = `x-local: &local
+  ports: ["8081:81"]
+  cap_add: [ALL]
+services:
+  base:
+    image: nginx:1
+    ports: ["8080:80"]
+    cap_add: [ALL]
+  child:
+    <<: *local
+    extends: base
+`;
+    const diagnostics = diagnosticsFor(yaml, "child");
+    expect(
+      diagnostics
+        .filter(({ ruleId }) => ruleId === "no-unbound-ports")
+        .map(({ range }) => range.start.line),
+    ).toEqual([11, 10]);
+    expect(
+      diagnostics.find(({ ruleId }) => ruleId === "no-cap-add-all")?.range.start
+        .line,
+    ).toBe(10);
+  });
+
+  it("keeps local diagnostics for descendants of an external extends", () => {
+    const yaml = `services:
+  base:
+    extends: {file: ./elsewhere.yaml, service: child}
+    ports: [80]
+  child:
+    extends: base
+    ports: [81]
+`;
+    const diagnostics = diagnosticsFor(yaml, "child");
+    expect(
+      diagnostics
+        .filter(({ ruleId }) => ruleId === "no-unbound-ports")
+        .map(({ range }) => range.start.line),
+    ).toEqual([6, 7]);
+    expect(ruleIdsFor(yaml, "child")).not.toContain("require-healthcheck");
+  });
+
+  it("honors local sequence reset and override tags", () => {
+    const yaml = `services:
+  base:
+    image: nginx:1
+    ports: [80]
+    cap_add: [ALL]
+  child:
+    extends: base
+    ports: !override ["127.0.0.1:8080:80"]
+    cap_add: !reset [ALL]
+  grandchild:
+    extends: child
+`;
+    for (const name of ["child", "grandchild"]) {
+      expect(ruleIdsFor(yaml, name)).not.toContain("no-unbound-ports");
+      expect(ruleIdsFor(yaml, name)).not.toContain("no-cap-add-all");
+    }
+  });
+});
+
 describe("diagnostic location and message", () => {
   it("points at the alias and marks the message as inherited", () => {
     const source = [

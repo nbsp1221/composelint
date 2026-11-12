@@ -234,9 +234,11 @@ const main = defineCommand({
       }
 
       if (fixedCount > 0) {
-        console.log(
-          pc.green(`\n✔ Fixed ${fixedCount} file${fixedCount > 1 ? "s" : ""}`),
+        const summary = pc.green(
+          `\n✔ Fixed ${fixedCount} file${fixedCount > 1 ? "s" : ""}`,
         );
+        if (formatterName === "stylish") console.log(summary);
+        else console.error(summary);
       }
 
       for (const failure of writeFailures) {

@@ -13,7 +13,7 @@ Reports any `cap_add` entry equal to `ALL`, in any letter case. Inherited lists 
 
 ## Why it matters
 
-Docker starts a container with a restricted capability set. `cap_add: [ALL]` hands back everything that was withheld, including `SYS_ADMIN` (mount, namespace manipulation), `SYS_PTRACE` (inspect other processes) and `SYS_MODULE` (load kernel modules). The result is close to `privileged: true` while looking like a smaller change in review.
+Docker starts a container with a restricted capability set. `cap_add: [ALL]` requests all Linux capabilities, including `SYS_ADMIN` and `SYS_PTRACE`. `privileged: true` also grants broad device access and relaxes security profiles.
 
 Adding the one capability a service actually needs keeps the rest withheld.
 
@@ -28,7 +28,7 @@ services:
 ```
 
 ```
-5:9  warn  Service "app": cap_add includes ALL, which is equivalent to privileged mode  no-cap-add-all
+5:9  warn  Service "app": cap_add includes ALL Linux capabilities  no-cap-add-all
 ```
 
 Lower case is reported too:

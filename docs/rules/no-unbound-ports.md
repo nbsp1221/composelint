@@ -9,7 +9,7 @@ Published ports should be bound to a specific interface.
 
 ## What it does
 
-Reports a published port that is reachable on every interface of the host, which is the case when the host address is omitted or is a wildcard (`0.0.0.0`, `::`, `*`, or empty).
+Reports a port mapping with a wildcard host address (`0.0.0.0`, `::`, `*`, or empty) or no host address. An omitted address uses Docker's default binding, which normally covers every interface.
 
 Both port syntaxes are checked:
 
@@ -21,11 +21,12 @@ Both port syntaxes are checked:
 | `"8000-8010:8000-8010"` | yes | ranges follow the same rule |
 | `"8080"` or `8080` | yes | Docker assigns a host port and binds it to all interfaces |
 | `{ published: "8080", target: 80 }` | yes | long syntax without `host_ip` |
-| `{ published: "8080", host_ip: 0.0.0.0 }` | yes | wildcard `host_ip` |
+| `{ target: 80, published: "8080", host_ip: 0.0.0.0 }` | yes | wildcard `host_ip` |
 | `"127.0.0.1:8080:80"` | no | bound to loopback |
 | `"[::1]:8080:80"` | no | bound to IPv6 loopback |
-| `{ published: "8080", host_ip: 127.0.0.1 }` | no | bound |
-| `{ target: 80 }` | no | nothing published |
+| `{ target: 80, published: "8080", host_ip: 127.0.0.1 }` | no | bound |
+| `{ target: 80 }` | yes | Docker chooses the host port |
+| `{ target: 80, host_ip: "::1" }` | no | dynamically assigned port bound to loopback |
 
 A `/tcp` or `/udp` suffix does not change the result. Inherited lists are included and marked `(inherited)`.
 
@@ -127,10 +128,9 @@ Allowances are exact. An allowance for `443/tcp` does not cover `443/udp`, a
 different service, or a new port on the same service. A published range is
 written as a range, for example `8000-8010/tcp`.
 
-The container-only short syntax (`"3000"`) asks Docker to choose the published
-host port at runtime. Because that port is unknown during linting, it cannot
-match an allowance; bind a known host port explicitly if it is an approved
-public surface.
+When the host port is omitted (`"3000"` or `{ target: 3000 }`) or set to
+`0`, Docker chooses it at runtime. A dynamic port cannot match an allowance.
+Specify a known host port for an approved public mapping.
 
 An `allow` entry applies to every linted file containing that exact service
 name. In a repository with unrelated Compose projects that reuse service names,
@@ -141,6 +141,7 @@ place a separate composelint configuration at each project root.
 - Whether "all interfaces" is actually dangerous depends on the host. On a single-interface development machine it may be fine; the rule cannot know, which is why it defaults to a warning.
 - An uninterpolated variable in place of the whole list (`ports: ${PORTS}`) is reported as a type problem by [`spec-schema`](spec-schema.md), not here.
 - A dynamically assigned host port cannot be allowlisted because its number is not known until the service starts.
+- Short-syntax ranges are checked as written. Overlapping ranges can each produce a diagnostic, even when Compose deduplicates individual bindings.
 
 ## Related
 

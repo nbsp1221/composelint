@@ -27,7 +27,9 @@ Checks that the keys of every service appear in a fixed order. All 93 service ke
 | Security | `privileged`, `read_only`, `cap_add`, `cap_drop`, `security_opt`, `sysctls`, `userns_mode`, `use_api_socket`, `ipc`, `pid`, `uts`, `isolation`, `runtime` |
 | Development | `develop` |
 
-Merge keys (`<<`) and `x-*` extension fields are left where they are.
+Merge keys (`<<`) and `x-*` extension fields do not participate in ordering
+checks. Unknown keys also stay out of the checks and keep their slot when
+`--fix` reorders known keys. [`spec-schema`](spec-schema.md) reports unknown keys.
 
 ## Why it matters
 
