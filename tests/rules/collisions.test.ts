@@ -57,6 +57,14 @@ describe("static published-port collisions", () => {
     ['"127.0.0.1:8080:80"', '"8080:81"'],
     ['"[::]:8080:80"', '"[::1]:8080:81"'],
     ['"[0:0:0:0:0:0:0:1]:8080:80/udp"', '"[::1]:8080:81/udp"'],
+    ['"8080-8082:80-82"', '"8081:81"'],
+    ['{target: 80, published: "8080"}', '"8080-8082:80-82"'],
+    ['"8080-8082:80-82"', '"8082-8084:90-92"'],
+    ['"127.0.0.1:8080-8082:80-82"', '"0.0.0.0:8081-8083:91-93"'],
+    ['"[::]:8080-8082:80-82/udp"', '"[::1]:8081:81/udp"'],
+    ['"1-65535:1-65535"', '"65535:81"'],
+    ['"0-2:80-82"', '"1:81"'],
+    ['"8080-8080:80"', '"8080:81"'],
   ])(
     "reports overlapping bindings %s and %s on the later entry",
     (first, second) => {
@@ -87,8 +95,27 @@ describe("static published-port collisions", () => {
       '"8080:80"',
     ],
     [`{target: 80, published: 8080, protocol: "\${PROTO:-tcp}"}`, '"8080:80"'],
-    ['"8080-8082:80-82"', '"8081:81"'],
+    ['"8080-8082:80-82"', '"8083-8085:80-82"'],
+    ['"8080-8082:80-82"', '"8079:81"'],
+    ['"8080-8082:80-82"', '"8081:81/udp"'],
+    ['"127.0.0.1:8080-8082:80-82"', '"127.0.0.2:8081:81"'],
+    ['"0.0.0.0:8080-8082:80-82"', '"[::]:8081:81"'],
+    ['"8080-8082:80"', '"8081:81"'],
+    ['"8080:80-82"', '"8080:80"'],
+    ['"8080-8082:80-81"', '"8081:81"'],
+    ['"8082-8080:80-82"', '"8081:81"'],
+    ['"8080-8082:82-80"', '"8081:81"'],
+    ['"65535-65536:80-81"', '"65535:81"'],
+    ['"8080-8082:65534-65536"', '"8081:81"'],
+    ['"8080--8082:80-82"', '"8081:81"'],
+    ['"8080-8082:80-82/tcp/udp"', '"8081:81/udp"'],
+    ['"[::1:8080-8082:80-82"', '"[::1]:8081:81"'],
+    ['"0-2:80-82"', '"0:80"'],
+    ['"80-82"', '"81:81"'],
+    [`"8080-8082:80-\${LAST:-82}"`, '"8081:81"'],
     ['{target: 80, published: "8080-8082"}', '"8081:81"'],
+    ['"8081:81"', '{target: 80, published: "8080-8082"}'],
+    ['{target: "80-82", published: "8080-8082"}', '"8081:81"'],
     ["{target: 80, published: 8080, host_ip: true}", '"8080:80"'],
   ])("does not infer a collision from %s and %s", (first, second) => {
     expect(messagesFor(portPair(first, second), PORT_RULE)).toEqual([]);
@@ -98,6 +125,26 @@ describe("static published-port collisions", () => {
     const source =
       'services:\n  first:\n    image: nginx:1\n    ports: ["8080:80", "8080:81"]\n';
     expect(messagesFor(source, PORT_RULE)).toEqual([]);
+  });
+
+  it("reports one warning for an overlapping inherited range", () => {
+    const source = `services:
+  base:
+    image: nginx:1
+    ports: ["8080-8082:80-82"]
+  child:
+    extends: base
+  reset:
+    extends: base
+    ports: !reset ["8080-8082:80-82"]
+`;
+    const diagnostics = diagnosticsFor(source, PORT_RULE);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({
+      message:
+        'Service "child": host binding "0.0.0.0:8080-8082/tcp" may conflict with service "base" (inherited)',
+      range: { start: { line: 6, column: 5 } },
+    });
   });
 });
 

@@ -12,7 +12,8 @@ the Node API may change in a minor release. Such changes are listed here.
 ### Added
 
 - Warn about duplicate literal container names and conflicting static host
-  ports between services enabled by default in the same Compose file.
+  ports, including fixed short-syntax ranges, between services enabled by
+  default in the same Compose file.
 
 ### Fixed
 

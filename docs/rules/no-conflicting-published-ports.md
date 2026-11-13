@@ -11,7 +11,10 @@ Services should avoid conflicting static host-port bindings.
 
 Reports a static binding on a later service when an earlier service in the same
 file publishes the same host port and protocol on an overlapping host address.
-It checks single literal ports from 1 through 65535 in short or long syntax.
+It checks single literal ports from 1 through 65535 in short or long syntax,
+and short mappings with equal-length host and container ranges, such as
+`"8080-8082:80-82"`. Range endpoints are inclusive. Host port zero is
+dynamically allocated, including when it is the first member of a short range.
 TCP is the default. UDP and SCTP are compared separately.
 
 IPv4 and IPv6 are checked separately. Within either family a wildcard overlaps
@@ -55,9 +58,9 @@ services:
 
 ## Known limitations
 
-- Omitted or zero published ports are dynamically assigned. The rule skips them
-  along with ranges, interpolated mappings, and `expose`.
-- Short ranges can reserve multiple ports. A long-syntax published range can
-  allocate one available port. Neither form is compared.
+- The rule skips omitted or dynamic published ports, interpolated mappings,
+  `expose`, and invalid ranges.
+- A host range with one target can allocate a single available port. The rule
+  skips these allocation pools, including long-syntax published ranges.
 - The rule compares distinct services in one file. It does not inspect the
   Docker daemon, host network, dual-stack behavior, or runtime profile selection.
