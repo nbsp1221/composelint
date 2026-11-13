@@ -63,17 +63,16 @@ describe("presets", () => {
     }
   });
 
-  it("strict sets all rules to error", () => {
-    for (const severity of Object.values(presets.strict)) {
-      expect(severity).toBe("error");
-    }
-  });
-
-  it("never disables a rule through a preset", () => {
-    for (const preset of Object.values(presets)) {
-      for (const severity of Object.values(preset)) {
-        expect(severity).not.toBe("off");
-      }
+  it("raises enabled rules to error in strict and leaves only the opt-in rules off", () => {
+    for (const { meta } of allRules) {
+      const optIn = [
+        "services-alphabetical-order",
+        "service-dependencies-alphabetical-order",
+      ].includes(meta.name);
+      expect(presets.recommended[meta.name] === "off", meta.name).toBe(optIn);
+      expect(presets.strict[meta.name], meta.name).toBe(
+        optIn ? "off" : "error",
+      );
     }
   });
 });

@@ -29,11 +29,16 @@ export function expectedOrder(
   return [...sortedKnown, ...unknown];
 }
 
-function itemRangeOf(pair: Pair): ItemRange | null {
+export function itemRangeOf(
+  pair: Pair,
+  includeTrailingComments = false,
+): ItemRange | null {
   const keyStart = (pair.key as { range?: [number, number, number] } | null)
     ?.range?.[0];
+  const valueRange = (pair.value as { range?: [number, number, number] } | null)
+    ?.range;
   const valueEnd =
-    (pair.value as { range?: [number, number, number] } | null)?.range?.[1] ??
+    valueRange?.[includeTrailingComments ? 2 : 1] ??
     (pair.key as { range?: [number, number, number] } | null)?.range?.[1];
 
   if (keyStart === undefined || valueEnd === undefined) return null;

@@ -74,7 +74,7 @@ export function applyEdits(
   return { output, applied, deferred };
 }
 
-/** Source range of one mapping entry: from the key start to the value end. */
+/** Source range of a mapping or sequence entry, from its key or dash. */
 export interface ItemRange {
   keyStart: number;
   valueEnd: number;
@@ -121,6 +121,8 @@ export interface ReorderOptions {
    * header that must stay at the top of the file.
    */
   includeLeadingComments?: boolean;
+  /** Separator used when an unterminated last entry moves earlier. */
+  newline?: string;
 }
 
 /** Indentation width of the line starting at `start`. */
@@ -258,8 +260,8 @@ function commentRunStart(
 }
 
 /**
- * Rewrites a mapping so its entries appear in `order` (indices into `items`).
- * Returns null when the mapping cannot be reordered as whole lines.
+ * Rewrites a block so its entries appear in `order` (indices into `items`).
+ * Returns null when the entries cannot be reordered as whole lines.
  */
 export function reorderEntries(
   source: string,
@@ -285,14 +287,16 @@ export function reorderEntries(
   const end = segments[segments.length - 1].end;
   const original = source.slice(start, end);
   const endsWithNewline = original.endsWith("\n");
+  const newline = options.newline ?? "\n";
 
   const parts = order.map((index) => {
     const text = source.slice(segments[index].start, segments[index].end);
-    return text.endsWith("\n") ? text : `${text}\n`;
+    return text.endsWith("\n") ? text : `${text}${newline}`;
   });
 
   let text = parts.join("");
-  if (!endsWithNewline) text = text.replace(/\n$/, "");
+  if (!endsWithNewline)
+    text = text.replace(options.newline ? /\r?\n$/ : /\n$/, "");
 
   if (text === original) return null;
 

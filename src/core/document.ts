@@ -50,6 +50,8 @@ const RESETTABLE_FIELDS = [
 interface YamlReferences {
   targets: WeakMap<Alias, Node>;
   repeatedReferenceOffsets: number[];
+  definitions: Map<string, number[]>;
+  aliases: Map<string, number[]>;
 }
 
 function extendService(
@@ -195,7 +197,12 @@ export class ComposeDocument {
       for (const offset of offsets) repeatedReferenceOffsets.push(offset);
       for (const offset of references) repeatedReferenceOffsets.push(offset);
     }
-    this.#references = { targets, repeatedReferenceOffsets };
+    this.#references = {
+      targets,
+      repeatedReferenceOffsets,
+      definitions,
+      aliases,
+    };
     return this.#references;
   }
 
@@ -206,6 +213,21 @@ export class ComposeDocument {
         (offset) => start <= offset && offset < end,
       )
     );
+  }
+
+  /** A move can rebind a repeated name or put an alias before its definition. */
+  hasAnchorDependency(start: number, end: number): boolean {
+    if (!this.#mayHaveAliases) return false;
+    if (this.hasRepeatedAnchorReference(start, end)) return true;
+
+    const { definitions, aliases } = this.#yamlReferences();
+    const inside = (offset: number): boolean => start <= offset && offset < end;
+    for (const [name, offsets] of aliases) {
+      if (offsets.some(inside) && definitions.get(name)?.some(inside)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   #resolveAlias(node: unknown): unknown {

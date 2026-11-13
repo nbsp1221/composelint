@@ -56,8 +56,8 @@ Unknown top-level keys are reported rather than ignored, so a typo such as `excl
 
 | Preset | Meaning |
 | --- | --- |
-| `recommended` | Every rule enabled at its declared severity. Obsolete syntax and schema violations are errors; opinionated checks are warnings, so they do not fail a pipeline on their own. |
-| `strict` | The same rules, all raised to `error`. |
+| `recommended` | Uses each rule's default severity. Obsolete syntax and schema violations are errors. Other checks may warn or require opt-in. |
+| `strict` | Raises enabled rules to `error`. Opt-in rules stay off. |
 
 Loosen a preset per rule with `"off"` rather than by switching presets. `--preset` on the command line overrides the configuration file.
 
@@ -77,6 +77,10 @@ Keys are rule names. Four notations are accepted, all equivalent:
 ```
 
 Severities are `"error"` / `"warn"` / `"off"`, or `2` / `1` / `0`.
+
+To opt in to alphabetical ordering, set
+`"services-alphabetical-order": "warn"` or
+`"service-dependencies-alphabetical-order": "warn"` in `rules`.
 
 Options go in the second element of the array form, or under `options` in the object form:
 

@@ -101,13 +101,15 @@ Full reference: **[docs/configuration.md](docs/configuration.md)**.
 
 ## Rules
 
-Legend: 💼 error in the preset · ⚠️ warning in the preset · 🔧 fixable with `--fix` · ⚙️ has options
+Legend: 💼 error in the preset · ⚠️ warning in the preset · 🚫 off in the preset · 🔧 fixable with `--fix` · ⚙️ has options
 
 | Rule | Category | recommended | strict | 🔧 | ⚙️ |
 | --- | --- | --- | --- | --- | --- |
 | [spec-schema](docs/rules/spec-schema.md) | spec | 💼 | 💼 | | |
 | [top-level-order](docs/rules/top-level-order.md) | style | ⚠️ | 💼 | 🔧 | ⚙️ |
 | [service-key-order](docs/rules/service-key-order.md) | style | ⚠️ | 💼 | 🔧 | ⚙️ |
+| [services-alphabetical-order](docs/rules/services-alphabetical-order.md) | style | 🚫 | 🚫 | 🔧 | |
+| [service-dependencies-alphabetical-order](docs/rules/service-dependencies-alphabetical-order.md) | style | 🚫 | 🚫 | 🔧 | |
 | [no-version-field](docs/rules/no-version-field.md) | style | 💼 | 💼 | 🔧 | |
 | [no-privileged](docs/rules/no-privileged.md) | security | ⚠️ | 💼 | | |
 | [no-host-network](docs/rules/no-host-network.md) | security | ⚠️ | 💼 | | |
