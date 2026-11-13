@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveConfig } from "../../src/config/loader.js";
-import { messagesFor, ruleIds } from "../helpers.js";
+import { ComposeDocument } from "../../src/core/document.js";
+import { diagnosticsFor, messagesFor, ruleIds } from "../helpers.js";
 
 /** A one-service file whose `ports:` body is provided by the test. */
 function portsFixture(ports: string): string {
@@ -427,19 +428,20 @@ describe("no-unbound-ports allowed published ports", () => {
 });
 
 describe("no-privileged privileged", () => {
+  function fixture(value: string): string {
+    return [
+      "name: qa",
+      "services:",
+      "  web:",
+      "    image: nginx:1.27",
+      '    healthcheck: { test: ["CMD", "true"] }',
+      `    privileged: ${value}`,
+      "",
+    ].join("\n");
+  }
+
   function messages(value: string): string[] {
-    return messagesFor(
-      [
-        "name: qa",
-        "services:",
-        "  web:",
-        "    image: nginx:1.27",
-        '    healthcheck: { test: ["CMD", "true"] }',
-        `    privileged: ${value}`,
-        "",
-      ].join("\n"),
-      "no-privileged",
-    );
+    return messagesFor(fixture(value), "no-privileged");
   }
 
   it("reports the boolean form", () => {
@@ -458,9 +460,77 @@ describe("no-privileged privileged", () => {
     expect(messages('"false"')).toEqual([]);
   });
 
-  it("does not report an uninterpolated variable", () => {
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: Compose interpolation literal
-    expect(messages("${PRIVILEGED}")).toEqual([]);
+  it.each(["yEs", '"YeS"', "ON", "'oN'", "Y", '"y"'])(
+    "reports enabled legacy spelling %s without a schema error",
+    (value) => {
+      expect(messages(value)).toHaveLength(1);
+      expect(messagesFor(fixture(value), "spec-schema")).toEqual([]);
+    },
+  );
+
+  it.each(["nO", '"No"', "OFF", "'oFf'", "N", '"n"'])(
+    "accepts disabled legacy spelling %s",
+    (value) => {
+      expect(messages(value)).toEqual([]);
+      expect(messagesFor(fixture(value), "spec-schema")).toEqual([]);
+    },
+  );
+
+  it.each([
+    '" true "',
+    '"yes "',
+    '"1"',
+    '"0"',
+    '""',
+    "enabled",
+    "t",
+    "1",
+    '"$$PRIVILEGED"',
+    `"\${PRIVILEGED"`,
+    "!override enabled",
+  ])("reports invalid literal %s as a schema error only", (value) => {
+    expect(messages(value)).toEqual([]);
+    const diagnostics = diagnosticsFor(fixture(value), "spec-schema");
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].message).toContain('"privileged" must be a boolean');
+    expect(diagnostics[0].range.start.line).toBe(6);
+  });
+
+  it.each([`\${PRIVILEGED}`, '"$PRIVILEGED"', `"\${PRIVILEGED:-yes}"`])(
+    "leaves interpolated value %s unresolved",
+    (value) => {
+      expect(messages(value)).toEqual([]);
+      expect(messagesFor(fixture(value), "spec-schema")).toEqual([]);
+    },
+  );
+
+  it("honors inherited legacy flags and reset tags", () => {
+    const source = `x-enable: &enable YES
+services:
+  base:
+    image: nginx:1
+    privileged: *enable
+    environment: {FLAG: yes}
+  child:
+    extends: base
+  reset:
+    extends: base
+    privileged: !reset enabled
+  disabled:
+    extends: base
+    privileged: Off
+`;
+    expect(messagesFor(source, "no-privileged")).toEqual([
+      'Service "base": privileged mode grants full access to the host',
+      'Service "child": privileged mode grants full access to the host (inherited)',
+    ]);
+    expect(messagesFor(source, "spec-schema")).toEqual([]);
+    expect(
+      new ComposeDocument(source, "compose.yaml").getMergedServiceValue(
+        "base",
+        "environment",
+      ),
+    ).toEqual({ FLAG: "yes" });
   });
 });
 

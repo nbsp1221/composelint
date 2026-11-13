@@ -3,6 +3,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import composeSpecSchema from "../../../schemas/compose-spec.json" with {
   type: "json",
 };
+import { parseComposeBoolean } from "../../core/compose-boolean.js";
 import type { Rule, RuleContext } from "../../core/types.js";
 import { normalizeSchemaErrors } from "./schema-errors.js";
 
@@ -11,6 +12,8 @@ const MERGE_TAGS = new Set(["!reset", "!override"]);
 
 /** Compose interpolates `${VAR}` before validating, so keys may contain it. */
 const INTERPOLATION = /\$\{/;
+const VALUE_INTERPOLATION =
+  /(?:^|[^$])(?:\$\$)*\$(?:[a-zA-Z_]|\{[a-zA-Z_][^}]*\})/;
 
 let compiled: ValidateFunction | null = null;
 
@@ -78,9 +81,9 @@ export const specSchema: Rule = {
     if (data === null || data === undefined) return;
 
     const validate = getValidator();
-    if (validate(data)) return;
-
-    const errors = validate.errors as ErrorObject[] | null;
+    const errors = validate(data)
+      ? null
+      : (validate.errors as ErrorObject[] | null);
     const hasTags =
       context.document.source.includes("!reset") ||
       context.document.source.includes("!override");
@@ -110,6 +113,26 @@ export const specSchema: Rule = {
       context.report({
         message: violation.message,
         node: resolveNode(context, violation.path, violation.unknownKey),
+      });
+    }
+
+    for (const [name, service] of Object.entries(
+      context.document.getMergedServices() ?? {},
+    )) {
+      if (service === null || typeof service !== "object") continue;
+      const { privileged } = service as Record<string, unknown>;
+      if (
+        typeof privileged !== "string" ||
+        parseComposeBoolean(privileged) !== undefined ||
+        VALUE_INTERPOLATION.test(privileged)
+      ) {
+        continue;
+      }
+      const path = ["services", name, "privileged"];
+      if (hasTags && context.document.getTagAtPath(path) === "!reset") continue;
+      context.report({
+        message: `Service "${name}": "privileged" must be a boolean or a Compose boolean string`,
+        node: resolveNode(context, path, undefined),
       });
     }
   },

@@ -9,7 +9,9 @@ Services should not run in privileged mode.
 
 ## What it does
 
-Reports a service whose effective configuration sets `privileged: true`, including the quoted form `"true"` that Compose also accepts.
+Reports a service whose effective configuration enables `privileged`. Compose
+accepts `true` and the legacy spellings `yes`, `on`, and `y`, case-insensitively,
+with or without quotes. Compose warns about the legacy spellings.
 
 Values inherited through a merge key (`<<: *anchor`) or through `extends` count as well; the diagnostic then points at the line that brought them in and the message ends with `(inherited)`.
 
