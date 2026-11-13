@@ -24,6 +24,8 @@ the Node API may change in a minor release. Such changes are listed here.
   when a same-file child leaves them null.
 - Recognize expanded IPv6 wildcard addresses and nested interpolation in
   short-syntax port mappings.
+- Retain inherited image, network mode, and privilege settings through plain
+  nulls, and honor `!reset` when checking effective service settings.
 
 ## [0.2.0] - 2026-08-12
 

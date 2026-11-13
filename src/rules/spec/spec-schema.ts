@@ -94,7 +94,7 @@ export const specSchema: Rule = {
         violation.path.length === 3 &&
         section === "services" &&
         typeof key === "string" &&
-        context.document.inheritsNullSequence(String(service), key)
+        context.document.inheritsNullField(String(service), key)
       ) {
         continue;
       }

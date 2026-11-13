@@ -125,6 +125,173 @@ describe("local values win over inherited ones", () => {
   });
 });
 
+describe("scalar values in same-file extends", () => {
+  it("inherits null security and image fields and reports them at extends", () => {
+    const source = `services:
+  base:
+    image: nginx
+    privileged: true
+    network_mode: host
+  child:
+    extends: base
+    image: null
+    privileged: null
+    network_mode: null
+  local:
+    extends: child
+    image: nginx:1
+    privileged: false
+    network_mode: bridge
+`;
+    const { document } = lint(source);
+    expect(document.getMergedService("child")).toMatchObject({
+      image: "nginx",
+      privileged: true,
+      network_mode: "host",
+    });
+    expect(document.getMergedService("local")).toMatchObject({
+      image: "nginx:1",
+      privileged: false,
+      network_mode: "bridge",
+    });
+    const rules = ["image-require-tag", "no-host-network", "no-privileged"];
+    const warnings = diagnosticsFor(source, "child").filter(({ ruleId }) =>
+      rules.includes(ruleId),
+    );
+    expect(warnings.map(({ ruleId }) => ruleId).sort()).toEqual(rules);
+    for (const warning of warnings) {
+      expect(warning.range.start).toEqual({ line: 7, column: 5 });
+      expect(warning.message).toMatch(/\(inherited\)$/);
+    }
+    expect(ruleIdsFor(source, "child")).not.toContain("spec-schema");
+    expect(
+      ruleIdsFor(source, "local").filter((rule) => rules.includes(rule)),
+    ).toEqual([]);
+  });
+
+  it("resets scalar fields through aliases and merge keys", () => {
+    const source = `x-privileged: &reset !reset true
+x-defaults: &defaults
+  privileged: *reset
+  network_mode: !reset host
+services:
+  base:
+    image: nginx:1
+    privileged: true
+    network_mode: host
+  child:
+    <<: *defaults
+    extends: base
+  descendant:
+    extends: child
+  standalone:
+    image: nginx:1
+    privileged: !reset true
+    network_mode: !reset host
+`;
+    const { document } = lint(source);
+    for (const name of ["child", "descendant", "standalone"]) {
+      expect(
+        document.getMergedServiceValue(name, "privileged"),
+      ).toBeUndefined();
+      expect(
+        document.getMergedServiceValue(name, "network_mode"),
+      ).toBeUndefined();
+      expect(ruleIdsFor(source, name)).not.toContain("no-privileged");
+      expect(ruleIdsFor(source, name)).not.toContain("no-host-network");
+      expect(ruleIdsFor(source, name)).not.toContain("spec-schema");
+    }
+  });
+
+  it("still reports plain null fields with no inherited value", () => {
+    const source = `services:
+  empty:
+    image: nginx:1
+  risky:
+    image: nginx:1
+    privileged: true
+    network_mode: host
+  missing:
+    extends: empty
+    privileged: null
+    network_mode: null
+  standalone:
+    image: nginx:1
+    privileged: null
+    network_mode: null
+  replacement:
+    extends: risky
+    privileged: !override false
+    network_mode: !override bridge
+  reset:
+    extends: risky
+    privileged: !reset null
+    network_mode: !reset null
+`;
+    for (const name of ["missing", "standalone"]) {
+      expect(
+        diagnosticsFor(source, name).filter(
+          ({ ruleId }) => ruleId === "spec-schema",
+        ),
+      ).toHaveLength(2);
+      expect(ruleIdsFor(source, name)).not.toContain("no-privileged");
+      expect(ruleIdsFor(source, name)).not.toContain("no-host-network");
+    }
+    for (const name of ["reset", "replacement"]) {
+      expect(ruleIdsFor(source, name)).not.toContain("spec-schema");
+      expect(ruleIdsFor(source, name)).not.toContain("no-privileged");
+      expect(ruleIdsFor(source, name)).not.toContain("no-host-network");
+    }
+  });
+
+  it("inherits plain nulls from a merge but keeps nulls after a parent reset invalid", () => {
+    const source = `x-unset: &unset {privileged: null, network_mode: null}
+services:
+  base:
+    image: nginx:1
+    privileged: true
+    network_mode: host
+  child:
+    <<: *unset
+    extends: base
+  cleared:
+    extends: child
+    privileged: !reset true
+    network_mode: !reset host
+  descendant:
+    extends: cleared
+    <<: *unset
+`;
+    expect(ruleIdsFor(source, "child")).toEqual(
+      expect.arrayContaining(["no-host-network", "no-privileged"]),
+    );
+    expect(ruleIdsFor(source, "child")).not.toContain("spec-schema");
+    expect(ruleIdsFor(source, "descendant")).toContain("spec-schema");
+    expect(ruleIdsFor(source, "descendant")).not.toContain("no-host-network");
+    expect(ruleIdsFor(source, "descendant")).not.toContain("no-privileged");
+  });
+
+  it("does not treat reset build, provider or healthcheck fields as present", () => {
+    const source = `services:
+  base:
+    image: nginx
+    build: .
+    healthcheck: {test: ["CMD", "true"]}
+  child:
+    extends: base
+    build: !reset .
+    healthcheck: !reset {test: ["CMD", "true"]}
+    provider: !reset {type: example}
+`;
+    expect(lint(source).document.getMergedServiceKeys("child")).toEqual([
+      "image",
+      "extends",
+    ]);
+    expect(ruleIdsFor(source, "child")).toContain("image-require-tag");
+    expect(ruleIdsFor(source, "child")).toContain("require-healthcheck");
+  });
+});
+
 describe("security sequences in same-file extends", () => {
   const source = `services:
   base:

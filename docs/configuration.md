@@ -136,8 +136,11 @@ Two kinds of partial files are recognised **without configuration**:
 
 The CLI lints each selected file separately. It uses `include:` references to
 identify partials and does not add targets to the lint run or combine files into
-a project. Same-file `extends` combines `ports` and `cap_add` and otherwise
-prefers local keys. The linter does not load external `extends` targets.
+a project. Same-file `extends` combines `ports` and `cap_add`. Plain nulls
+in those lists or in `image`, `network_mode`, and `privileged` retain the
+parent's value when present. The linter also honors `!reset` on these fields
+and on `build`, `healthcheck`, and `provider` when checking effective service
+settings. The linter does not load external `extends` targets.
 
 Use `partials` for fragments whose names follow neither convention:
 

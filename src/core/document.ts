@@ -28,10 +28,19 @@ export interface ServiceReportTarget {
 
 interface ResolvedService {
   value: Record<string, unknown>;
-  localIndices?: Map<string, Array<number | null> | null>;
+  localIndices?: Map<string, Array<number | null>>;
+  inheritedNulls?: Set<string>;
 }
 
 const EXTENDED_SEQUENCES = ["ports", "cap_add"] as const;
+const EXTENDED_SCALARS = ["image", "network_mode", "privileged"] as const;
+const RESETTABLE_FIELDS = [
+  ...EXTENDED_SEQUENCES,
+  ...EXTENDED_SCALARS,
+  "build",
+  "healthcheck",
+  "provider",
+] as const;
 
 interface YamlReferences {
   targets: WeakMap<Alias, Node>;
@@ -41,17 +50,30 @@ interface YamlReferences {
 function extendService(
   base: Record<string, unknown>,
   local: Record<string, unknown>,
-  replacesSequence: (key: string) => boolean,
+  replacesField: (key: string) => boolean,
 ): ResolvedService {
   const value = { ...base, ...local };
-  const localIndices = new Map<string, Array<number | null> | null>();
+  const localIndices = new Map<string, Array<number | null>>();
+  const inheritedNulls = new Set<string>();
+  for (const key of EXTENDED_SCALARS) {
+    if (
+      local[key] === null &&
+      Object.hasOwn(base, key) &&
+      base[key] !== null &&
+      base[key] !== undefined &&
+      !replacesField(key)
+    ) {
+      value[key] = base[key];
+      inheritedNulls.add(key);
+    }
+  }
   for (const key of EXTENDED_SEQUENCES) {
     const parent = base[key];
     const child = local[key];
-    if (!Array.isArray(parent) || replacesSequence(key)) continue;
+    if (!Array.isArray(parent) || replacesField(key)) continue;
     if (child === null) {
       value[key] = parent;
-      localIndices.set(key, null);
+      inheritedNulls.add(key);
       continue;
     }
     if (!Array.isArray(child)) continue;
@@ -70,7 +92,7 @@ function extendService(
       Array.from(entries.values(), ({ index }) => index),
     );
   }
-  return { value, localIndices };
+  return { value, localIndices, inheritedNulls };
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -120,14 +142,14 @@ export class ComposeDocument {
   /** Services whose definition partly lives in another file. */
   readonly #externalExtends = new Set<string>();
   readonly #mayHaveAliases: boolean;
-  readonly #hasSequenceTags: boolean;
+  readonly #hasMergeTags: boolean;
   #references: YamlReferences | undefined;
 
   constructor(source: string, filePath: string) {
     this.source = source;
     this.filePath = filePath;
     this.#mayHaveAliases = source.includes("*");
-    this.#hasSequenceTags =
+    this.#hasMergeTags =
       source.includes("!reset") || source.includes("!override");
     // `merge` resolves YAML merge keys (`<<: *anchor`), which Compose supports
     // and which schema validation needs to see as plain data.
@@ -261,7 +283,8 @@ export class ComposeDocument {
   /**
    * One service as plain data: everything it inherits through merge keys plus
    * anything it takes from a service it `extends` in this same file. Ports
-   * and added capabilities combine; other local keys take precedence.
+   * and added capabilities combine. For supported inherited fields, an
+   * untagged null can fall back to the parent and a reset clears the field.
    */
   getMergedService(name: string): Record<string, unknown> | null {
     return this.#resolvedServices().get(name)?.value ?? null;
@@ -295,13 +318,16 @@ export class ComposeDocument {
       if (!isPlainRecord(raw)) return null;
 
       const tag = (key: string) =>
-        this.#hasSequenceTags
+        this.#hasMergeTags
           ? this.getTagAtPath(["services", name, key])
           : undefined;
       let value = raw;
-      for (const key of EXTENDED_SEQUENCES) {
-        if (Object.hasOwn(raw, key) && tag(key) === "!reset") {
-          value = { ...value, [key]: undefined };
+      if (this.#hasMergeTags) {
+        for (const key of RESETTABLE_FIELDS) {
+          if (Object.hasOwn(raw, key) && tag(key) === "!reset") {
+            if (value === raw) value = { ...raw };
+            value[key] = undefined;
+          }
         }
       }
       const local = { value };
@@ -344,14 +370,18 @@ export class ComposeDocument {
     return this.getMergedService(name)?.[key];
   }
 
-  inheritsNullSequence(name: string, key: string): boolean {
-    return this.#resolvedServices().get(name)?.localIndices?.get(key) === null;
+  inheritsNullField(name: string, key: string): boolean {
+    return (
+      this.#resolvedServices().get(name)?.inheritedNulls?.has(key) ?? false
+    );
   }
 
   /** The effective keys of a service, inherited keys included. */
   getMergedServiceKeys(name: string): string[] {
     const service = this.getMergedService(name);
-    return service ? Object.keys(service) : [];
+    return service
+      ? Object.keys(service).filter((key) => service[key] !== undefined)
+      : [];
   }
 
   /**
@@ -407,13 +437,13 @@ export class ComposeDocument {
     const localIndex = typeof index === "number" ? indices?.[index] : undefined;
     const raw = this.getMergedServices()?.[name];
     const fromExtends =
-      indices === null ||
       localIndex === null ||
       (typeof key === "string" &&
         service !== undefined &&
-        Object.hasOwn(service.value, key) &&
-        isPlainRecord(raw) &&
-        !Object.hasOwn(raw, key));
+        (service.inheritedNulls?.has(key) ||
+          (Object.hasOwn(service.value, key) &&
+            isPlainRecord(raw) &&
+            !Object.hasOwn(raw, key))));
 
     if (fromExtends) {
       const node = this.getKeyNodeAtPath(["services", name], "extends");
