@@ -126,6 +126,8 @@ Glob patterns for files that carry only part of a project. Rules that ask a ques
 | --- | --- |
 | [`require-name`](rules/require-name.md) | Only the base file declares the project name. |
 | [`require-healthcheck`](rules/require-healthcheck.md) | The healthcheck may be defined in the file being overridden. |
+| [`no-duplicate-container-names`](rules/no-duplicate-container-names.md) | The effective name or service profile may come from another file. |
+| [`no-conflicting-published-ports`](rules/no-conflicting-published-ports.md) | The effective host bindings or service profiles may come from another file. |
 
 Every other rule still runs, so an override file that publishes a port on all interfaces is still reported.
 
@@ -136,9 +138,10 @@ Two kinds of partial files are recognised **without configuration**:
 
 The CLI lints each selected file separately. It uses `include:` references to
 identify partials and does not add targets to the lint run or combine files into
-a project. Same-file `extends` combines `ports` and `cap_add`. Plain nulls
-in those lists or in `image`, `network_mode`, and `privileged` retain the
-parent's value when present. The linter also honors `!reset` on these fields
+a project. Same-file `extends` combines `ports`, `cap_add`, and `profiles`.
+Plain nulls in those lists or in `container_name`, `image`, `network_mode`,
+and `privileged` retain the parent's value when present. The linter also honors
+`!reset` on these fields
 and on `build`, `healthcheck`, and `provider` when checking effective service
 settings. The linter does not load external `extends` targets.
 

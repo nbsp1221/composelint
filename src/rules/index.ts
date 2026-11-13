@@ -1,4 +1,6 @@
 import type { Rule } from "../core/types.js";
+import { noConflictingPublishedPorts } from "./best-practice/no-conflicting-published-ports.js";
+import { noDuplicateContainerNames } from "./best-practice/no-duplicate-container-names.js";
 import { requireHealthcheck } from "./best-practice/require-healthcheck.js";
 import { requireName } from "./best-practice/require-name.js";
 import { imageRequireTag } from "./security/image-require-tag.js";
@@ -25,6 +27,8 @@ export const allRules: Rule[] = [
   noUnboundPorts,
   imageRequireTag,
   // Best Practice
+  noDuplicateContainerNames,
+  noConflictingPublishedPorts,
   requireName,
   requireHealthcheck,
 ];
@@ -32,6 +36,8 @@ export const allRules: Rule[] = [
 export {
   imageRequireTag,
   noCapAddAll,
+  noConflictingPublishedPorts,
+  noDuplicateContainerNames,
   noHostNetwork,
   noPrivileged,
   noUnboundPorts,

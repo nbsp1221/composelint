@@ -32,8 +32,13 @@ interface ResolvedService {
   inheritedNulls?: Set<string>;
 }
 
-const EXTENDED_SEQUENCES = ["ports", "cap_add"] as const;
-const EXTENDED_SCALARS = ["image", "network_mode", "privileged"] as const;
+const EXTENDED_SEQUENCES = ["ports", "cap_add", "profiles"] as const;
+const EXTENDED_SCALARS = [
+  "container_name",
+  "image",
+  "network_mode",
+  "privileged",
+] as const;
 const RESETTABLE_FIELDS = [
   ...EXTENDED_SEQUENCES,
   ...EXTENDED_SCALARS,

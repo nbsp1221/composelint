@@ -358,12 +358,17 @@ describe("partial files", () => {
     ]);
   });
 
-  it("marks only require-name and require-healthcheck as project-wide", () => {
+  it("marks presence and collision checks as project-wide", () => {
     const flagged = allRules
       .filter((rule) => rule.meta.requiresFullProject)
       .map((rule) => rule.meta.name)
       .sort();
-    expect(flagged).toEqual(["require-healthcheck", "require-name"]);
+    expect(flagged).toEqual([
+      "no-conflicting-published-ports",
+      "no-duplicate-container-names",
+      "require-healthcheck",
+      "require-name",
+    ]);
   });
 });
 

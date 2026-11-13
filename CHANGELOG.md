@@ -9,6 +9,11 @@ the Node API may change in a minor release. Such changes are listed here.
 
 ## [Unreleased]
 
+### Added
+
+- Warn about duplicate literal container names and conflicting static host
+  ports between services enabled by default in the same Compose file.
+
 ### Fixed
 
 - Keep inherited `ports` and `cap_add` entries when a same-file `extends`

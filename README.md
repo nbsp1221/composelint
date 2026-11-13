@@ -99,6 +99,8 @@ Legend: 💼 error in the preset · ⚠️ warning in the preset · 🔧 fixable
 | [image-require-tag](docs/rules/image-require-tag.md) | security | ⚠️ | 💼 | | ⚙️ |
 | [require-name](docs/rules/require-name.md) | best-practice | ⚠️ | 💼 | | |
 | [require-healthcheck](docs/rules/require-healthcheck.md) | best-practice | ⚠️ | 💼 | | ⚙️ |
+| [no-duplicate-container-names](docs/rules/no-duplicate-container-names.md) | best-practice | ⚠️ | 💼 | | |
+| [no-conflicting-published-ports](docs/rules/no-conflicting-published-ports.md) | best-practice | ⚠️ | 💼 | | |
 
 ### Scope of the security checks
 
