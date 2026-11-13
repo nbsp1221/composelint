@@ -18,7 +18,8 @@ the Node API may change in a minor release. Such changes are listed here.
 ### Fixed
 
 - Recognize Compose's legacy boolean spellings for service privilege and
-  report invalid literal privilege strings.
+  report invalid literal privilege strings on services that have not been
+  removed by a reset.
 
 - Keep inherited `ports` and `cap_add` entries when a same-file `extends`
   child declares its own list, and point inherited warnings at `extends`.

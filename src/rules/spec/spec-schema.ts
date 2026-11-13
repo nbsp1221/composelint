@@ -129,7 +129,13 @@ export const specSchema: Rule = {
         continue;
       }
       const path = ["services", name, "privileged"];
-      if (hasTags && context.document.getTagAtPath(path) === "!reset") continue;
+      if (
+        hasTags &&
+        (context.document.isResetService(name) ||
+          context.document.getTagAtPath(path) === "!reset")
+      ) {
+        continue;
+      }
       context.report({
         message: `Service "${name}": "privileged" must be a boolean or a Compose boolean string`,
         node: resolveNode(context, path, undefined),

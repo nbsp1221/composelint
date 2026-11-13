@@ -282,7 +282,17 @@ export class ComposeDocument {
   /** Service names from the merged data, in document order. */
   getMergedServiceNames(): string[] {
     const services = this.getMergedServices();
-    return services ? Object.keys(services) : [];
+    return services
+      ? Object.keys(services).filter((name) => !this.isResetService(name))
+      : [];
+  }
+
+  isResetService(name: string): boolean {
+    return (
+      this.#hasMergeTags &&
+      (this.getTagAtPath(["services"]) === "!reset" ||
+        this.getTagAtPath(["services", name]) === "!reset")
+    );
   }
 
   /**
@@ -318,7 +328,9 @@ export class ComposeDocument {
       name: string,
       seen: ReadonlySet<string>,
     ): ResolvedService | null => {
-      if (!Object.hasOwn(services, name)) return null;
+      if (!Object.hasOwn(services, name) || this.isResetService(name)) {
+        return null;
+      }
       const raw = services[name];
       if (!isPlainRecord(raw)) return null;
 
