@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { extractExcludes } from "../src/cli/exclude-args.js";
 import {
   countDiagnostics,
   describeError,
@@ -9,6 +10,39 @@ import {
   resolveExitCode,
 } from "../src/cli/exit.js";
 import type { LintResult } from "../src/core/types.js";
+
+describe("extractExcludes", () => {
+  it("collects options in order and leaves targets after the delimiter alone", () => {
+    expect(
+      extractExcludes(
+        [
+          "compose.yaml",
+          "--config",
+          "--exclude=custom.json",
+          "--exclude",
+          "generated/**",
+          "--exclude=!generated/keep/**",
+          "--exclude=-scratch",
+          "--",
+          "--exclude",
+          "another.yaml",
+        ],
+        ["--config"],
+      ),
+    ).toEqual(["generated/**", "!generated/keep/**", "-scratch"]);
+  });
+
+  it.each(
+    [
+      ["--exclude"],
+      ["--exclude", "--fix"],
+      ["--exclude="],
+      ["--exclude=!"],
+    ].map((args) => ({ args })),
+  )("rejects an empty or missing pattern in $args", ({ args }) => {
+    expect(() => extractExcludes(args, [])).toThrow("--exclude requires");
+  });
+});
 
 function result(severities: Array<"error" | "warn">): LintResult {
   return {

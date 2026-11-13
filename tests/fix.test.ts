@@ -280,6 +280,60 @@ describe("multi-pass fixing", () => {
 });
 
 describe("unfixable shapes", () => {
+  it("declines a service reorder that can rebind a duplicate anchor", () => {
+    const source = `services:
+  web:
+    environment:
+      VALUE: &shared worker
+    command: *shared
+    image: &shared nginx:1
+`;
+    const before = lintSource(source, "compose.yaml", allRules, config);
+    expect(before.document.getMergedServiceValue("web", "command")).toBe(
+      "worker",
+    );
+    expect(
+      before.result.diagnostics.find(
+        ({ ruleId }) => ruleId === "service-key-order",
+      ),
+    ).toMatchObject({
+      ruleId: "service-key-order",
+      fix: undefined,
+    });
+    const outcome = fix(source);
+    expect(outcome.source).toBe(source);
+    expect(outcome.document.getMergedServiceValue("web", "command")).toBe(
+      "worker",
+    );
+  });
+
+  it("declines a top-level reorder that can rebind a duplicate anchor", () => {
+    const source = `x-image: &shared nginx:1
+services:
+  web:
+    image: *shared
+x-later: &shared nginx:2
+name: demo
+`;
+    const outcome = fix(source);
+    expect(outcome.source).toBe(source);
+    expect(outcome.document.getMergedServiceValue("web", "image")).toBe(
+      "nginx:1",
+    );
+  });
+
+  it("still fixes a mapping outside the duplicate anchor and alias ranges", () => {
+    const source = `x-first: &shared worker
+x-later: &shared nginx:1
+x-reference: *shared
+services:
+  web:
+    ports: []
+    image: nginx:1
+`;
+    expect(fix(source).source).toContain("    image: nginx:1\n    ports: []");
+  });
+
   it("does not offer a fix for a flow mapping service", () => {
     const source = [
       "name: qa",

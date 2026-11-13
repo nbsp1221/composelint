@@ -56,8 +56,8 @@ Unknown top-level keys are reported rather than ignored, so a typo such as `excl
 
 | Preset | Meaning |
 | --- | --- |
-| `recommended` | Every rule enabled at its declared severity. Obsolete syntax and schema violations are errors; opinionated checks are warnings, so they do not fail a pipeline on their own. |
-| `strict` | The same rules, all raised to `error`. |
+| `recommended` | Uses each rule's default severity. Obsolete syntax and schema violations are errors. Other checks may warn or require opt-in. |
+| `strict` | Raises enabled rules to `error`. Opt-in rules stay off. |
 
 Loosen a preset per rule with `"off"` rather than by switching presets. `--preset` on the command line overrides the configuration file.
 
@@ -77,6 +77,12 @@ Keys are rule names. Four notations are accepted, all equivalent:
 ```
 
 Severities are `"error"` / `"warn"` / `"off"`, or `2` / `1` / `0`.
+
+To opt in to alphabetical ordering, set
+`"services-alphabetical-order": "warn"` or
+`"service-dependencies-alphabetical-order": "warn"` in `rules`.
+For port style, opt in with `"service-ports-alphabetical-order": "warn"`
+or `"require-quotes-in-ports": "warn"`.
 
 Options go in the second element of the array form, or under `options` in the object form:
 
@@ -116,7 +122,22 @@ Semantics follow ESLint's `ignores`:
 - Later patterns win, so order matters.
 - Paths outside the configuration file's directory never match.
 
-Naming a file explicitly on the command line does not override `exclude`; the file is skipped and the reason is printed.
+Use `--exclude <glob>` or `--exclude=<glob>` for exclusions on a single run.
+Repeat the option for each pattern and use forward slashes in globs. CLI
+patterns run in argument order after the built-in and configuration patterns.
+They match paths inside the working directory. Configuration patterns keep
+their own base directory.
+
+```sh
+composelint --exclude 'generated/**' --exclude '!generated/keep/**'
+```
+
+The later pattern can re-include files inside an excluded directory during
+discovery. The walker still skips dot-directories and only discovers Compose
+file names. An explicitly named file that matches the final exclusions is
+skipped and reported on stderr. A missing target is a usage error even if its
+name matches an exclusion. When no files remain, the CLI exits successfully
+and JSON or SARIF reports contain no results.
 
 ## `partials`
 
@@ -126,13 +147,24 @@ Glob patterns for files that carry only part of a project. Rules that ask a ques
 | --- | --- |
 | [`require-name`](rules/require-name.md) | Only the base file declares the project name. |
 | [`require-healthcheck`](rules/require-healthcheck.md) | The healthcheck may be defined in the file being overridden. |
+| [`no-duplicate-container-names`](rules/no-duplicate-container-names.md) | The effective name or service profile may come from another file. |
+| [`no-conflicting-published-ports`](rules/no-conflicting-published-ports.md) | The effective host bindings or service profiles may come from another file. |
 
 Every other rule still runs, so an override file that publishes a port on all interfaces is still reported.
 
 Two kinds of partial files are recognised **without configuration**:
 
 - Files matching the Compose override convention: `**/*.override.yaml`, `**/*.override.yml`.
-- Files referenced from a top-level `include:` in any Compose file in the project. The string form, the `path:` object form and a `path:` list are all followed, including relative paths such as `../shared/base.yaml`.
+- Files selected for linting whose paths appear in a top-level `include:` in a scanned Compose file. The CLI recognizes string entries, `path:` objects, and `path:` lists, with relative paths resolved from the declaring file.
+
+The CLI lints each selected file separately. It uses `include:` references to
+identify partials and does not add targets to the lint run or combine files into
+a project. Same-file `extends` combines `ports`, `cap_add`, and `profiles`.
+Plain nulls in those lists or in `container_name`, `image`, `network_mode`,
+and `privileged` retain the parent's value when present. The linter also honors
+`!reset` on these fields
+and on `build`, `healthcheck`, and `provider` when checking effective service
+settings. The linter does not load external `extends` targets.
 
 Use `partials` for fragments whose names follow neither convention:
 

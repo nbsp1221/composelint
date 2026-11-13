@@ -15,6 +15,7 @@ import {
 import { allRules } from "../rules/index.js";
 import { VERSION } from "../version.js";
 import { findComposeFiles, resolveTargets } from "./discover.js";
+import { extractExcludes } from "./exclude-args.js";
 import {
   countDiagnostics,
   describeError,
@@ -83,6 +84,16 @@ const main = defineCommand({
       description: "Automatically fix problems where possible",
       default: false,
     },
+    "fix-dry-run": {
+      type: "boolean",
+      description: "Preview automatic fixes without writing files",
+      default: false,
+    },
+    exclude: {
+      type: "string",
+      description:
+        "Exclude a glob relative to the working directory (repeatable)",
+    },
     format: {
       type: "string",
       description: "Output format: stylish, json, github, sarif",
@@ -109,9 +120,25 @@ const main = defineCommand({
       default: "-1",
     },
   },
-  async run({ args }) {
+  async run({ args, rawArgs }) {
     try {
-      const targets = (args._ ?? []) as string[];
+      const targets = args._;
+      const dryRun = args["fix-dry-run"];
+      if (args.fix && dryRun) {
+        return fail("--fix and --fix-dry-run cannot be used together.");
+      }
+      let cliExcludes: string[];
+      try {
+        cliExcludes = extractExcludes(rawArgs, [
+          "--config",
+          "--format",
+          "--preset",
+          "--max-warnings",
+          "--maxWarnings",
+        ]);
+      } catch (error) {
+        return fail(describeError(error));
+      }
 
       const maxWarnings = parseMaxWarnings(
         args["max-warnings"] as string | undefined,
@@ -150,8 +177,14 @@ const main = defineCommand({
 
       // Exclude patterns resolve relative to the configuration file, so a config
       // committed to a repository behaves the same from any subdirectory.
-      const baseDir = filepath ? dirname(filepath) : process.cwd();
-      const isExcluded = createPathMatcher(config.exclude, baseDir);
+      const cwd = process.cwd();
+      const baseDir = filepath ? dirname(filepath) : cwd;
+      const isExcluded = createPathMatcher(config.exclude, baseDir, {
+        patterns: cliExcludes,
+        baseDir: cwd,
+      });
+      const excludeReason =
+        cliExcludes.length > 0 ? "exclude patterns" : "configuration";
       // Override files and declared fragments only carry part of a project.
       const isPartial = createPathMatcher(config.partials, baseDir);
 
@@ -170,19 +203,23 @@ const main = defineCommand({
 
       for (const file of skipped) {
         console.error(
-          pc.yellow(`composelint: "${file}" is excluded by configuration.`),
+          pc.yellow(`composelint: "${file}" is excluded by ${excludeReason}.`),
         );
       }
 
       if (files.length === 0) {
-        const hasUserExcludes = config.exclude.length > DEFAULT_EXCLUDE.length;
+        const hasUserExcludes =
+          cliExcludes.length > 0 ||
+          config.exclude.length > DEFAULT_EXCLUDE.length;
         console.error(
           pc.yellow(
             skipped.length > 0 || hasUserExcludes
-              ? "No Docker Compose files to lint — every match is excluded by configuration."
+              ? "No Docker Compose files to lint after applying exclusions."
               : "No Docker Compose files found.",
           ),
         );
+        const formatted = format(formatterName, [], allRules);
+        if (formatted.trim()) console.log(formatted);
         process.exitCode = EXIT_OK;
         return;
       }
@@ -209,13 +246,13 @@ const main = defineCommand({
           : sources;
       const includedPaths = collectIncludedPaths(includeIndexFiles);
 
-      const { results, fixedCount, writeFailures } = await lintFiles({
+      const { results, fixedCount, previews, writeFailures } = await lintFiles({
         sources,
         rules: allRules,
         config,
         isPartial,
         includedPaths,
-        fix: Boolean(args.fix),
+        fixMode: dryRun ? "dry-run" : args.fix ? "write" : "off",
       });
 
       // `--quiet` only changes what is printed, never whether the run passes.
@@ -234,8 +271,23 @@ const main = defineCommand({
       }
 
       if (fixedCount > 0) {
-        console.log(
-          pc.green(`\n✔ Fixed ${fixedCount} file${fixedCount > 1 ? "s" : ""}`),
+        const summary = pc.green(
+          `\n✔ Fixed ${fixedCount} file${fixedCount > 1 ? "s" : ""}`,
+        );
+        if (formatterName === "stylish") console.log(summary);
+        else console.error(summary);
+      }
+
+      if (previews.length > 0) {
+        const stream =
+          formatterName === "stylish" ? process.stdout : process.stderr;
+        for (const { filePath, source } of previews) {
+          stream.write(`\n--- ${filePath} (after fixes) ---\n`);
+          stream.write(source);
+          if (!source.endsWith("\n")) stream.write("\n");
+        }
+        stream.write(
+          `\nWould fix ${previews.length} file${previews.length > 1 ? "s" : ""}\n`,
         );
       }
 

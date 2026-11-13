@@ -1,3 +1,14 @@
+import composeSpecSchema from "../../../schemas/compose-spec.json" with {
+  type: "json",
+};
+
+export const schemaServiceKeys = new Set(
+  Object.keys(composeSpecSchema.$defs.service.properties),
+);
+export const schemaTopLevelKeys = new Set(
+  Object.keys(composeSpecSchema.properties),
+);
+
 /**
  * The canonical key order for a service, expressed as logical groups.
  *
@@ -8,9 +19,6 @@
  *   here exactly once, and a test enforces that against the vendored schema.
  * - dclint groups Compose keys by purpose and documents the rationale, which is
  *   what makes an ordering opinion reviewable rather than arbitrary.
- *
- * Keys the specification does not define (and future keys not yet placed here)
- * keep their relative order after the known keys.
  */
 export const SERVICE_KEY_GROUPS = {
   /** What this service inherits from, before anything it defines itself. */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveConfig } from "../../src/config/loader.js";
-import { messagesFor, ruleIds } from "../helpers.js";
+import { ComposeDocument } from "../../src/core/document.js";
+import { diagnosticsFor, messagesFor, ruleIds } from "../helpers.js";
 
 /** A one-service file whose `ports:` body is provided by the test. */
 function portsFixture(ports: string): string {
@@ -171,6 +172,58 @@ describe("no-unbound-ports published ports", () => {
     expect(portMessages('\n      - "[::]:4000:4000"')).toHaveLength(1);
   });
 
+  it.each([
+    '"[0000:0:0:0:0:0:0:0]:8080:80"',
+    '"[0::0]:8080:80"',
+    '"[::0.0.0.0]:8080:80"',
+    '{target: 80, published: 8080, host_ip: "0:0:0:0:0:0:0:0"}',
+  ])("reports equivalent IPv6 wildcard %s", (entry) => {
+    expect(portMessages(`\n      - ${entry}`)).toEqual([
+      expect.stringMatching(/on all interfaces \(::\)$/),
+    ]);
+    expect(
+      portMessages(`\n      - ${entry}`, [
+        { service: "web", published: ["8080/tcp"] },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("keeps expanded IPv6 loopback quiet", () => {
+    expect(portMessages('\n      - "[0:0:0:0:0:0:0:1]:8080:80"')).toEqual([]);
+  });
+
+  it("recognizes a published port with nested interpolation without allowlisting its fallback", () => {
+    const entry = `\${API_GW_HTTP_PORT:-\${KONG_HTTP_PORT:-8000}}:8000/tcp`;
+    expect(
+      portMessages(`\n      - "${entry}"`, [
+        { service: "web", published: ["8000/tcp"] },
+      ]),
+    ).toEqual([
+      `Service "web": port "${entry}" is published on all interfaces (0.0.0.0)`,
+    ]);
+  });
+
+  it("keeps an explicit loopback binding around nested interpolation quiet", () => {
+    expect(
+      portMessages(
+        `\n      - "[::1]:\${HTTP_PORT:-\${DEFAULT_PORT:-8000}}:8000/tcp"`,
+      ),
+    ).toEqual([]);
+  });
+
+  it("ignores separators inside the interpolation expression", () => {
+    const entry = `8080:\${TARGET:?set target: see config/path}`;
+    expect(
+      portMessages(`\n      - "${entry}"`, [
+        { service: "web", published: ["8080/tcp"] },
+      ]),
+    ).toEqual([]);
+    expect(portMessages(`\n      - "${entry}"`)).toHaveLength(1);
+    expect(
+      portMessages(`\n      - "\${HOST_BINDING:-127.0.0.1}:8080:80"`),
+    ).toEqual([]);
+  });
+
   it("reports a port range", () => {
     expect(portMessages('\n      - "8000-8010:8000-8010"')).toHaveLength(1);
   });
@@ -213,15 +266,51 @@ describe("no-unbound-ports published ports", () => {
     ).toEqual([]);
   });
 
-  it("reports a dynamically assigned host port", () => {
-    expect(portMessages('\n      - "3000"')).toHaveLength(1);
-    expect(portMessages("\n      - 3000")).toHaveLength(1);
+  it.each([
+    "80",
+    '"80"',
+    "{target: 80}",
+    "{target: 80, mode: host}",
+    '"0:80"',
+    '{target: 80, published: "0"}',
+  ])(
+    "reports a dynamically assigned port for %s without using its target as an allowance",
+    (entry) => {
+      expect(
+        portMessages(`\n      - ${entry}`, [
+          { service: "web", published: ["80/tcp"] },
+        ]),
+      ).toEqual([
+        'Service "web": container port "80" gets a dynamically assigned host port on all interfaces (0.0.0.0)',
+      ]);
+    },
+  );
+
+  it.each([
+    '"127.0.0.1::80"',
+    '"[::1]::80"',
+    '{target: 80, host_ip: "127.0.0.1"}',
+    '{target: 80, host_ip: "::1"}',
+  ])("ignores dynamic ports bound to loopback in %s", (entry) => {
+    expect(portMessages(`\n      - ${entry}`)).toEqual([]);
   });
 
-  it("ignores a long syntax entry that publishes nothing", () => {
-    expect(portMessages("\n      - target: 80\n        mode: host")).toEqual(
-      [],
-    );
+  it.each(['"[::]::80"', '{target: 80, host_ip: "::"}'])(
+    "reports dynamic IPv6 wildcard bindings for %s",
+    (entry) => {
+      expect(portMessages(`\n      - ${entry}`)).toEqual([
+        'Service "web": container port "80" gets a dynamically assigned host port on all interfaces (::)',
+      ]);
+    },
+  );
+
+  it("ignores expose without ports", () => {
+    expect(
+      messagesFor(
+        "services:\n  web:\n    image: nginx:1\n    expose: [80]\n",
+        "no-unbound-ports",
+      ),
+    ).toEqual([]);
   });
 
   it("reports the protocol form on all interfaces", () => {
@@ -339,19 +428,20 @@ describe("no-unbound-ports allowed published ports", () => {
 });
 
 describe("no-privileged privileged", () => {
+  function fixture(value: string): string {
+    return [
+      "name: qa",
+      "services:",
+      "  web:",
+      "    image: nginx:1.27",
+      '    healthcheck: { test: ["CMD", "true"] }',
+      `    privileged: ${value}`,
+      "",
+    ].join("\n");
+  }
+
   function messages(value: string): string[] {
-    return messagesFor(
-      [
-        "name: qa",
-        "services:",
-        "  web:",
-        "    image: nginx:1.27",
-        '    healthcheck: { test: ["CMD", "true"] }',
-        `    privileged: ${value}`,
-        "",
-      ].join("\n"),
-      "no-privileged",
-    );
+    return messagesFor(fixture(value), "no-privileged");
   }
 
   it("reports the boolean form", () => {
@@ -370,9 +460,77 @@ describe("no-privileged privileged", () => {
     expect(messages('"false"')).toEqual([]);
   });
 
-  it("does not report an uninterpolated variable", () => {
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: Compose interpolation literal
-    expect(messages("${PRIVILEGED}")).toEqual([]);
+  it.each(["yEs", '"YeS"', "ON", "'oN'", "Y", '"y"'])(
+    "reports enabled legacy spelling %s without a schema error",
+    (value) => {
+      expect(messages(value)).toHaveLength(1);
+      expect(messagesFor(fixture(value), "spec-schema")).toEqual([]);
+    },
+  );
+
+  it.each(["nO", '"No"', "OFF", "'oFf'", "N", '"n"'])(
+    "accepts disabled legacy spelling %s",
+    (value) => {
+      expect(messages(value)).toEqual([]);
+      expect(messagesFor(fixture(value), "spec-schema")).toEqual([]);
+    },
+  );
+
+  it.each([
+    '" true "',
+    '"yes "',
+    '"1"',
+    '"0"',
+    '""',
+    "enabled",
+    "t",
+    "1",
+    '"$$PRIVILEGED"',
+    `"\${PRIVILEGED"`,
+    "!override enabled",
+  ])("reports invalid literal %s as a schema error only", (value) => {
+    expect(messages(value)).toEqual([]);
+    const diagnostics = diagnosticsFor(fixture(value), "spec-schema");
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].message).toContain('"privileged" must be a boolean');
+    expect(diagnostics[0].range.start.line).toBe(6);
+  });
+
+  it.each([`\${PRIVILEGED}`, '"$PRIVILEGED"', `"\${PRIVILEGED:-yes}"`])(
+    "leaves interpolated value %s unresolved",
+    (value) => {
+      expect(messages(value)).toEqual([]);
+      expect(messagesFor(fixture(value), "spec-schema")).toEqual([]);
+    },
+  );
+
+  it("honors inherited legacy flags and reset tags", () => {
+    const source = `x-enable: &enable YES
+services:
+  base:
+    image: nginx:1
+    privileged: *enable
+    environment: {FLAG: yes}
+  child:
+    extends: base
+  reset:
+    extends: base
+    privileged: !reset enabled
+  disabled:
+    extends: base
+    privileged: Off
+`;
+    expect(messagesFor(source, "no-privileged")).toEqual([
+      'Service "base": privileged mode grants full access to the host',
+      'Service "child": privileged mode grants full access to the host (inherited)',
+    ]);
+    expect(messagesFor(source, "spec-schema")).toEqual([]);
+    expect(
+      new ComposeDocument(source, "compose.yaml").getMergedServiceValue(
+        "base",
+        "environment",
+      ),
+    ).toEqual({ FLAG: "yes" });
   });
 });
 

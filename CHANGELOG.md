@@ -9,6 +9,34 @@ the Node API may change in a minor release. Such changes are listed here.
 
 ## [Unreleased]
 
+### Added
+
+- Warn about duplicate literal container names and conflicting static host
+  ports, including fixed short-syntax ranges, between services enabled by
+  default in the same Compose file.
+
+### Fixed
+
+- Recognize Compose's legacy boolean spellings for service privilege and
+  report invalid literal privilege strings on services that have not been
+  removed by a reset.
+
+- Keep inherited `ports` and `cap_add` entries when a same-file `extends`
+  child declares its own list, and point inherited warnings at `extends`.
+- Report dynamically assigned host ports in both syntaxes, and describe
+  `cap_add: [ALL]` separately from privileged mode.
+- Leave unknown service and top-level keys to schema validation while ordering
+  recognized keys around them.
+- Keep JSON and SARIF output parseable with `--fix`, and reject inherited
+  property names in preset and rule option validation.
+- Decline ordering fixes that could rebind an alias to a duplicate YAML anchor.
+- Honor YAML-aliased merge tags and retain inherited port and capability lists
+  when a same-file child leaves them null.
+- Recognize expanded IPv6 wildcard addresses and nested interpolation in
+  short-syntax port mappings.
+- Retain inherited image, network mode, and privilege settings through plain
+  nulls, and honor `!reset` when checking effective service settings.
+
 ## [0.2.0] - 2026-08-12
 
 ### Added

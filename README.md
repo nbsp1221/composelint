@@ -7,7 +7,7 @@
 Linter and formatter for Docker Compose files, with key ordering, style, and security checks.
 
 - **Validates against the Compose Specification.** The official JSON schema is vendored, so unknown keys and wrong value types are caught at every level, not just at the top.
-- **Understands inheritance.** `<<: *anchor`, `extends`, `include:` and override files are resolved before rules run, so a setting hidden behind an anchor is still checked.
+- **Checks local inheritance.** Rules see YAML merge keys and same-file `extends`, including inherited ports and added capabilities. [Included and override files](docs/configuration.md#partials) are linted separately. External `extends` targets are outside the file being checked.
 - **Fixes without churn.** `--fix` edits the original text instead of re-serializing the document: comments, quoting style, line wrapping and CRLF endings survive untouched.
 - **Fits a pipeline.** Stylish, JSON, GitHub annotation and SARIF output; `--max-warnings` for a gate; documented exit codes.
 
@@ -32,6 +32,8 @@ composelint                  # walk the current directory
 composelint compose.yaml     # lint one file
 composelint stacks/          # lint a directory
 composelint --fix            # apply fixes
+composelint --fix-dry-run    # show the fixed text without saving it
+composelint --exclude 'examples/**' --exclude '!examples/keep/**'
 ```
 
 ```
@@ -49,6 +51,8 @@ compose.yaml
 | Option | Description |
 | --- | --- |
 | `--fix` | Apply fixes and write the files back |
+| `--fix-dry-run` | Preview fixed file contents and remaining diagnostics |
+| `--exclude <glob>` | Exclude paths relative to the working directory. Repeat for more patterns |
 | `--format <name>` | `stylish` (default), `json`, `github`, `sarif` |
 | `--preset <name>` | `recommended` (default) or `strict` |
 | `--config <path>` | Use a specific configuration file |
@@ -64,7 +68,20 @@ Exit codes:
 | `1` | At least one error, or too many warnings |
 | `2` | composelint could not run: bad option, unreadable file, broken configuration |
 
+`--fix-dry-run` runs the same fixes as `--fix` in memory and leaves source files
+untouched. It reports diagnostics and sets the exit code from the proposed
+contents, using the usual warning limit. For each changed file it prints the
+full proposed text under a file heading, then a `Would fix N files` summary.
+Previews go to stdout with `stylish` and to stderr with `json`, `sarif`, or
+`github`, so stdout contains only the selected report. Combining both fix
+flags is a usage error (exit `2`).
+
 With no arguments the current directory is walked recursively for `compose.yaml`, `docker-compose.yml`, `compose.prod.yaml`, `prod.compose.yaml` and similar names. See [which files are linted](docs/configuration.md#which-files-are-linted).
+
+Quote `--exclude` globs to pass them through the shell unchanged. CLI patterns
+run after config patterns. The last match wins, and a leading `!` re-includes
+a path. Exclusions also apply to explicitly named files. See
+[exclude patterns](docs/configuration.md#exclude).
 
 ## Configuration
 
@@ -84,13 +101,17 @@ Full reference: **[docs/configuration.md](docs/configuration.md)**.
 
 ## Rules
 
-Legend: 💼 error in the preset · ⚠️ warning in the preset · 🔧 fixable with `--fix` · ⚙️ has options
+Legend: 💼 error in the preset · ⚠️ warning in the preset · 🚫 off in the preset · 🔧 fixable with `--fix` · ⚙️ has options
 
 | Rule | Category | recommended | strict | 🔧 | ⚙️ |
 | --- | --- | --- | --- | --- | --- |
 | [spec-schema](docs/rules/spec-schema.md) | spec | 💼 | 💼 | | |
 | [top-level-order](docs/rules/top-level-order.md) | style | ⚠️ | 💼 | 🔧 | ⚙️ |
 | [service-key-order](docs/rules/service-key-order.md) | style | ⚠️ | 💼 | 🔧 | ⚙️ |
+| [services-alphabetical-order](docs/rules/services-alphabetical-order.md) | style | 🚫 | 🚫 | 🔧 | |
+| [service-dependencies-alphabetical-order](docs/rules/service-dependencies-alphabetical-order.md) | style | 🚫 | 🚫 | 🔧 | |
+| [service-ports-alphabetical-order](docs/rules/service-ports-alphabetical-order.md) | style | 🚫 | 🚫 | | |
+| [require-quotes-in-ports](docs/rules/require-quotes-in-ports.md) | style | 🚫 | 🚫 | 🔧 | |
 | [no-version-field](docs/rules/no-version-field.md) | style | 💼 | 💼 | 🔧 | |
 | [no-privileged](docs/rules/no-privileged.md) | security | ⚠️ | 💼 | | |
 | [no-host-network](docs/rules/no-host-network.md) | security | ⚠️ | 💼 | | |
@@ -99,6 +120,8 @@ Legend: 💼 error in the preset · ⚠️ warning in the preset · 🔧 fixable
 | [image-require-tag](docs/rules/image-require-tag.md) | security | ⚠️ | 💼 | | ⚙️ |
 | [require-name](docs/rules/require-name.md) | best-practice | ⚠️ | 💼 | | |
 | [require-healthcheck](docs/rules/require-healthcheck.md) | best-practice | ⚠️ | 💼 | | ⚙️ |
+| [no-duplicate-container-names](docs/rules/no-duplicate-container-names.md) | best-practice | ⚠️ | 💼 | | |
+| [no-conflicting-published-ports](docs/rules/no-conflicting-published-ports.md) | best-practice | ⚠️ | 💼 | | |
 
 ### Scope of the security checks
 

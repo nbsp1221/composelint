@@ -57,7 +57,9 @@ networks:
 
 - **The schema is a vendored copy.** Keys added to the specification after the copy was taken are reported as unknown until the copy is refreshed with `pnpm schema:update`. The provenance (upstream commit, date, checksum) is recorded in [`schemas/compose-spec.meta.json`](../../schemas/compose-spec.meta.json).
 - **Interpolated keys are skipped.** `services: { ${SERVICE}: ... }` cannot be checked because Compose resolves the variable first.
-- **Values behind `!reset` and `!override` are skipped.** These tags mark a placeholder, not data.
+- **Schema errors behind `!reset` and `!override` are skipped.** The separate
+  check for literal service-level `privileged` strings still checks
+  `!override` values, which Compose casts to a boolean.
 - Values are checked against the schema, not against Docker's runtime behaviour: a syntactically valid but nonsensical value passes.
 
 ## Related

@@ -63,17 +63,18 @@ describe("presets", () => {
     }
   });
 
-  it("strict sets all rules to error", () => {
-    for (const severity of Object.values(presets.strict)) {
-      expect(severity).toBe("error");
-    }
-  });
-
-  it("never disables a rule through a preset", () => {
-    for (const preset of Object.values(presets)) {
-      for (const severity of Object.values(preset)) {
-        expect(severity).not.toBe("off");
-      }
+  it("raises enabled rules to error in strict and leaves only the opt-in rules off", () => {
+    for (const { meta } of allRules) {
+      const optIn = [
+        "services-alphabetical-order",
+        "service-dependencies-alphabetical-order",
+        "service-ports-alphabetical-order",
+        "require-quotes-in-ports",
+      ].includes(meta.name);
+      expect(presets.recommended[meta.name] === "off", meta.name).toBe(optIn);
+      expect(presets.strict[meta.name], meta.name).toBe(
+        optIn ? "off" : "error",
+      );
     }
   });
 });
@@ -177,11 +178,22 @@ describe("resolveConfig", () => {
     expect(config.warnings[0]).toContain("invalid severity");
   });
 
-  it("warns about an unknown preset and falls back to recommended", () => {
-    const config = resolveConfig({}, "everything" as "strict");
-    expect(config.rules.get("no-version-field")?.severity).toBe("error");
-    expect(config.rules.get("top-level-order")?.severity).toBe("warn");
-    expect(config.warnings[0]).toContain('Unknown preset "everything"');
+  it.each(["everything", "constructor", "toString", "__proto__"])(
+    "warns about unknown preset %s and falls back to recommended",
+    (preset) => {
+      const config = resolveConfig({}, preset as "strict");
+      expect(config.rules.get("no-version-field")?.severity).toBe("error");
+      expect(config.rules.get("top-level-order")?.severity).toBe("warn");
+      expect(config.warnings[0]).toContain(`Unknown preset "${preset}"`);
+    },
+  );
+
+  it("rejects inherited property names as rule options", () => {
+    const config = resolveConfig({
+      rules: { "top-level-order": ["error", { constructor: true }] },
+    });
+    expect(config.rules.get("top-level-order")?.options).toEqual({});
+    expect(config.warnings[0]).toContain('unknown option "constructor"');
   });
 });
 

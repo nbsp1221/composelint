@@ -1,3 +1,4 @@
+import { type PublishedPort, parsePublishedPort } from "../../core/ports.js";
 import type {
   PublishedPortAllowance,
   Rule,
@@ -8,90 +9,12 @@ import { reportServiceValue } from "../report.js";
 /** Host addresses that mean "every interface". */
 const WILDCARD_HOSTS = new Set(["", "0.0.0.0", "::", "*"]);
 
-interface PublishedPort {
-  /** How the port is written, for the message. */
-  label: string;
-  /** The host address the port binds to, or undefined when none is given. */
-  hostIp: string | undefined;
-  /** Published host port or range; absent when Docker assigns it at runtime. */
-  published: string | undefined;
-  protocol: string;
-}
-
-/**
- * Reads the short syntax: `[HOST_IP:][HOST_PORT:]CONTAINER_PORT[/PROTOCOL]`.
- * Returns null when nothing is published on the host.
- */
-function parseShortSyntax(raw: string): PublishedPort | null {
-  const value = raw.trim();
-  const slash = value.lastIndexOf("/");
-  const withoutProtocol = slash === -1 ? value : value.slice(0, slash);
-  const protocol = slash === -1 ? "tcp" : value.slice(slash + 1).toLowerCase();
-
-  // An IPv6 address is bracketed: [::1]:8080:80
-  if (withoutProtocol.startsWith("[")) {
-    const closing = withoutProtocol.indexOf("]");
-    if (closing === -1) return null;
-    const hostIp = withoutProtocol.slice(1, closing);
-    const rest = withoutProtocol.slice(closing + 1).replace(/^:/, "");
-    // Compose requires an explicit host port when an IP address is present.
-    if (!rest.includes(":")) return null;
-    return {
-      label: value,
-      hostIp,
-      published: rest.split(":")[0],
-      protocol,
-    };
-  }
-
-  const parts = withoutProtocol.split(":");
-  // With only the container port, Docker assigns a host port at runtime and
-  // still binds it to every interface by default.
-  if (parts.length === 1) {
-    return {
-      label: value,
-      hostIp: undefined,
-      published: undefined,
-      protocol,
-    };
-  }
-  if (parts.length === 2) {
-    return {
-      label: value,
-      hostIp: undefined,
-      published: parts[0],
-      protocol,
-    };
-  }
-  return {
-    label: value,
-    hostIp: parts.slice(0, -2).join(":"),
-    published: parts.at(-2),
-    protocol,
-  };
-}
-
-/** Reads the long syntax: `{ target, published, host_ip, ... }`. */
-function parseLongSyntax(entry: Record<string, unknown>): PublishedPort | null {
-  const published = entry.published;
-  if (published === undefined || published === null) return null;
-
-  const hostIp = entry.host_ip;
-  return {
-    label: String(published),
-    hostIp: typeof hostIp === "string" ? hostIp : undefined,
-    published: String(published),
-    protocol:
-      typeof entry.protocol === "string" ? entry.protocol.toLowerCase() : "tcp",
-  };
-}
-
 function isAllowed(
   allowances: readonly PublishedPortAllowance[],
   service: string,
   port: PublishedPort,
 ): boolean {
-  if (port.published === undefined) return false;
+  if (port.published === undefined || port.published === "0") return false;
   const key = `${port.published}/${port.protocol}`.toLowerCase();
   return allowances.some(
     (allowance) =>
@@ -122,24 +45,22 @@ export const noUnboundPorts: Rule = {
       if (!Array.isArray(ports)) continue;
 
       ports.forEach((entry, index) => {
-        let port: PublishedPort | null = null;
-        if (typeof entry === "string" || typeof entry === "number") {
-          port = parseShortSyntax(String(entry));
-        } else if (typeof entry === "object" && entry !== null) {
-          port = parseLongSyntax(entry as Record<string, unknown>);
-        }
-
+        const port = parsePublishedPort(entry);
         if (!port) return;
         if (port.hostIp !== undefined && !WILDCARD_HOSTS.has(port.hostIp)) {
           return;
         }
         if (isAllowed(allowances, name, port)) return;
 
+        const subject =
+          port.published === undefined || port.published === "0"
+            ? `container port "${port.target}" gets a dynamically assigned host port`
+            : `port "${port.label}" is published`;
         reportServiceValue(
           context,
           name,
           ["ports", index],
-          `Service "${name}": port "${port.label}" is published on all interfaces (0.0.0.0)`,
+          `Service "${name}": ${subject} on all interfaces (${port.hostIp === "::" ? "::" : "0.0.0.0"})`,
         );
       });
     }

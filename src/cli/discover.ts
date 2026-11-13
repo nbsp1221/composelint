@@ -19,6 +19,7 @@ export async function findComposeFiles(
   const files: string[] = [];
 
   async function walk(current: string): Promise<void> {
+    if (isExcluded.canPruneDirectory(current)) return;
     let entries: Dirent[];
     try {
       entries = await readdir(current, { withFileTypes: true });
@@ -28,13 +29,15 @@ export async function findComposeFiles(
 
     for (const entry of entries) {
       const fullPath = join(current, entry.name);
-      if (isExcluded(fullPath)) continue;
-
       if (entry.isDirectory()) {
         if (!entry.name.startsWith(".")) {
           await walk(fullPath);
         }
-      } else if (entry.isFile() && COMPOSE_FILE_PATTERN.test(entry.name)) {
+      } else if (
+        entry.isFile() &&
+        COMPOSE_FILE_PATTERN.test(entry.name) &&
+        !isExcluded(fullPath)
+      ) {
         files.push(fullPath);
       }
     }
