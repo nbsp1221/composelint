@@ -1,14 +1,14 @@
 import {
-  chmod,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { join, resolve } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { findComposeFiles, resolveTargets } from "../src/cli/discover.js";
 import { collectIncludedPaths } from "../src/cli/includes.js";
 import { DEFAULT_EXCLUDE, DEFAULT_PARTIALS } from "../src/config/defaults.js";
@@ -16,6 +16,11 @@ import { createPathMatcher } from "../src/config/glob.js";
 import { resolveConfig } from "../src/config/loader.js";
 import { lintSource } from "../src/core/linter.js";
 import { allRules } from "../src/rules/index.js";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...fs, readdir: vi.fn(fs.readdir) };
+});
 
 const config = resolveConfig({});
 
@@ -40,9 +45,8 @@ beforeEach(async () => {
   process.chdir(dir);
 });
 
-afterEach(async () => {
+afterEach(() => {
   process.chdir(cwd);
-  await chmod(dir, 0o755).catch(() => {});
 });
 
 async function write(name: string): Promise<void> {
@@ -158,7 +162,7 @@ describe("file discovery", () => {
     expect(await findComposeFiles(".", isExcluded)).toEqual([
       "compose.yaml",
       "docker-compose.override.yml",
-      "examples/compose.yaml",
+      join("examples", "compose.yaml"),
     ]);
   });
 
@@ -268,9 +272,24 @@ describe("targets that point at the same file", () => {
 });
 
 describe("links", () => {
-  it("follows a symlink to a Compose file", async () => {
+  async function linkTo(target: string, skip: (reason: string) => never) {
+    try {
+      await symlink(target, join(dir, "compose.yaml"), "file");
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (
+        process.platform === "win32" &&
+        (code === "EPERM" || code === "EACCES")
+      ) {
+        skip(`Windows file symlink creation is unavailable (${code})`);
+      }
+      throw error;
+    }
+  }
+
+  it("follows a symlink to a Compose file", async ({ skip }) => {
     await write("real.yaml");
-    await symlink("real.yaml", join(dir, "compose.yaml"));
+    await linkTo("real.yaml", skip);
     const result = await resolveTargets(["compose.yaml"], isExcluded());
     expect(result.files).toEqual(["compose.yaml"]);
     expect(await readFile(join(dir, "compose.yaml"), "utf-8")).toBe(
@@ -278,8 +297,8 @@ describe("links", () => {
     );
   });
 
-  it("treats a broken symlink as missing", async () => {
-    await symlink("gone.yaml", join(dir, "compose.yaml"));
+  it("treats a broken symlink as missing", async ({ skip }) => {
+    await linkTo("gone.yaml", skip);
     const result = await resolveTargets(["compose.yaml"], isExcluded());
     expect(result.missing).toEqual(["compose.yaml"]);
   });
@@ -297,14 +316,28 @@ describe("directories", () => {
 
   it("skips a directory it cannot read", async () => {
     await write("compose.yaml");
-    await mkdir(join(dir, "locked"));
     await write(join("locked", "compose.yaml"));
-    await chmod(join(dir, "locked"), 0o000);
+    await write(join("readable", "compose.yaml"));
+    const fs =
+      await vi.importActual<typeof import("node:fs/promises")>(
+        "node:fs/promises",
+      );
+    const denied = Object.assign(new Error("Permission denied"), {
+      code: "EACCES",
+    });
 
-    const found = await findComposeFiles(".", isExcluded());
-    await chmod(join(dir, "locked"), 0o755);
-
-    expect(found).toEqual(["compose.yaml"]);
+    await vi.mocked(readdir).withImplementation(
+      async (path, options) => {
+        if (path === "locked") throw denied;
+        return fs.readdir(path, options);
+      },
+      async () => {
+        expect(await findComposeFiles(".", isExcluded())).toEqual([
+          "compose.yaml",
+          join("readable", "compose.yaml"),
+        ]);
+      },
+    );
   });
 
   it("does not choke on a directory named like a Compose file", async () => {
@@ -373,10 +406,12 @@ describe("partial files", () => {
 });
 
 describe("included fragments", () => {
+  const project = resolve("/project");
+
   it("collects string and object include entries", () => {
     const included = collectIncludedPaths([
       {
-        filePath: "/project/compose.yaml",
+        filePath: join(project, "compose.yaml"),
         source: [
           "include:",
           "  - ./fragments/db.yaml",
@@ -393,21 +428,21 @@ describe("included fragments", () => {
     ]);
 
     expect([...included].sort()).toEqual([
-      "/project/fragments/cache.yaml",
-      "/project/fragments/db.yaml",
-      "/project/fragments/queue.override.yaml",
-      "/project/fragments/queue.yaml",
+      join(project, "fragments", "cache.yaml"),
+      join(project, "fragments", "db.yaml"),
+      join(project, "fragments", "queue.override.yaml"),
+      join(project, "fragments", "queue.yaml"),
     ]);
   });
 
   it("resolves paths relative to the including file", () => {
     const included = collectIncludedPaths([
       {
-        filePath: "/project/stacks/compose.yaml",
+        filePath: join(project, "stacks", "compose.yaml"),
         source: "include:\n  - ../shared/base.yaml\n",
       },
     ]);
-    expect([...included]).toEqual(["/project/shared/base.yaml"]);
+    expect([...included]).toEqual([join(project, "shared", "base.yaml")]);
   });
 
   it("ignores files without an include list", () => {
