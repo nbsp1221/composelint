@@ -141,6 +141,7 @@ place a separate composelint configuration at each project root.
 - Whether "all interfaces" is actually dangerous depends on the host. On a single-interface development machine it may be fine; the rule cannot know, which is why it defaults to a warning.
 - An uninterpolated variable in place of the whole list (`ports: ${PORTS}`) is reported as a type problem by [`spec-schema`](spec-schema.md), not here.
 - A dynamically assigned host port cannot be allowlisted because its number is not known until the service starts.
+- The rule recognizes separators outside braced interpolation expressions, including nested defaults. It does not resolve variables or match fallback values against allowances. An interpolated host address is treated as unknown.
 - Short-syntax ranges are checked as written. Overlapping ranges can each produce a diagnostic, even when Compose deduplicates individual bindings.
 
 ## Related

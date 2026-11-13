@@ -81,10 +81,23 @@ export const specSchema: Rule = {
     if (validate(data)) return;
 
     const errors = validate.errors as ErrorObject[] | null;
+    const hasTags =
+      context.document.source.includes("!reset") ||
+      context.document.source.includes("!override");
 
     for (const violation of normalizeSchemaErrors(errors)) {
       // Values produced by `!reset` / `!override` are placeholders, not data.
-      if (hasMergeTag(context, violation.path)) continue;
+      if (hasTags && hasMergeTag(context, violation.path)) continue;
+
+      const [section, service, key] = violation.path;
+      if (
+        violation.path.length === 3 &&
+        section === "services" &&
+        typeof key === "string" &&
+        context.document.inheritsNullSequence(String(service), key)
+      ) {
+        continue;
+      }
 
       // A key written as `${SERVICE}` is resolved by Compose before parsing.
       if (

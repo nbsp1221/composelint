@@ -25,6 +25,9 @@ The following keys do not participate in ordering checks:
 - `version`, which is obsolete. [`no-version-field`](no-version-field.md) asks for its removal, so this rule does not also give it a position.
 - Unknown keys, which [`spec-schema`](spec-schema.md) reports. They keep their slot when `--fix` reorders known keys.
 
+A reorder that could change which definition a YAML alias points to is reported
+without a fix.
+
 ## Why it matters
 
 Reading an unfamiliar Compose file starts with "what is this project and what services does it define?". A consistent order means that question is always answered by the first lines, and it removes ordering from code review.

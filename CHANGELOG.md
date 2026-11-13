@@ -19,6 +19,11 @@ the Node API may change in a minor release. Such changes are listed here.
   recognized keys around them.
 - Keep JSON and SARIF output parseable with `--fix`, and reject inherited
   property names in preset and rule option validation.
+- Decline ordering fixes that could rebind an alias to a duplicate YAML anchor.
+- Honor YAML-aliased merge tags and retain inherited port and capability lists
+  when a same-file child leaves them null.
+- Recognize expanded IPv6 wildcard addresses and nested interpolation in
+  short-syntax port mappings.
 
 ## [0.2.0] - 2026-08-12
 

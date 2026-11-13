@@ -1,8 +1,12 @@
 import {
+  type Alias,
   type Document,
   isAlias,
   isMap,
+  isNode,
   isScalar,
+  isSeq,
+  type Node,
   type Pair,
   parseDocument,
   visit,
@@ -24,10 +28,15 @@ export interface ServiceReportTarget {
 
 interface ResolvedService {
   value: Record<string, unknown>;
-  localIndices?: Map<string, Array<number | null>>;
+  localIndices?: Map<string, Array<number | null> | null>;
 }
 
 const EXTENDED_SEQUENCES = ["ports", "cap_add"] as const;
+
+interface YamlReferences {
+  targets: WeakMap<Alias, Node>;
+  repeatedReferenceOffsets: number[];
+}
 
 function extendService(
   base: Record<string, unknown>,
@@ -35,17 +44,17 @@ function extendService(
   replacesSequence: (key: string) => boolean,
 ): ResolvedService {
   const value = { ...base, ...local };
-  const localIndices = new Map<string, Array<number | null>>();
+  const localIndices = new Map<string, Array<number | null> | null>();
   for (const key of EXTENDED_SEQUENCES) {
     const parent = base[key];
     const child = local[key];
-    if (
-      !Array.isArray(parent) ||
-      !Array.isArray(child) ||
-      replacesSequence(key)
-    ) {
+    if (!Array.isArray(parent) || replacesSequence(key)) continue;
+    if (child === null) {
+      value[key] = parent;
+      localIndices.set(key, null);
       continue;
     }
+    if (!Array.isArray(child)) continue;
 
     const entries = new Map<unknown, { item: unknown; index: number | null }>();
     const identity = key === "ports" ? portIdentity : (item: unknown) => item;
@@ -110,13 +119,93 @@ export class ComposeDocument {
 
   /** Services whose definition partly lives in another file. */
   readonly #externalExtends = new Set<string>();
+  readonly #mayHaveAliases: boolean;
+  readonly #hasSequenceTags: boolean;
+  #references: YamlReferences | undefined;
 
   constructor(source: string, filePath: string) {
     this.source = source;
     this.filePath = filePath;
+    this.#mayHaveAliases = source.includes("*");
+    this.#hasSequenceTags =
+      source.includes("!reset") || source.includes("!override");
     // `merge` resolves YAML merge keys (`<<: *anchor`), which Compose supports
     // and which schema validation needs to see as plain data.
     this.doc = parseDocument(source, { keepSourceTokens: true, merge: true });
+  }
+
+  #yamlReferences(): YamlReferences {
+    if (this.#references) return this.#references;
+    const anchors = new Map<string, Node>();
+    const definitions = new Map<string, number[]>();
+    const aliases = new Map<string, number[]>();
+    const targets = new WeakMap<Alias, Node>();
+    visit(this.doc, {
+      Node: (_key, node) => {
+        const offset = node.range?.[0];
+        if (isAlias(node)) {
+          const target = anchors.get(node.source);
+          if (target) targets.set(node, target);
+          if (offset !== undefined) {
+            const offsets = aliases.get(node.source) ?? [];
+            offsets.push(offset);
+            aliases.set(node.source, offsets);
+          }
+        } else if (node.anchor) {
+          anchors.set(node.anchor, node);
+          if (offset !== undefined) {
+            const offsets = definitions.get(node.anchor) ?? [];
+            offsets.push(offset);
+            definitions.set(node.anchor, offsets);
+          }
+        }
+      },
+    });
+    const repeatedReferenceOffsets: number[] = [];
+    for (const [name, offsets] of definitions) {
+      const references = aliases.get(name);
+      if (offsets.length < 2 || !references) continue;
+      for (const offset of offsets) repeatedReferenceOffsets.push(offset);
+      for (const offset of references) repeatedReferenceOffsets.push(offset);
+    }
+    this.#references = { targets, repeatedReferenceOffsets };
+    return this.#references;
+  }
+
+  hasRepeatedAnchorReference(start: number, end: number): boolean {
+    return (
+      this.#mayHaveAliases &&
+      this.#yamlReferences().repeatedReferenceOffsets.some(
+        (offset) => start <= offset && offset < end,
+      )
+    );
+  }
+
+  #resolveAlias(node: unknown): unknown {
+    return isAlias(node) ? this.#yamlReferences().targets.get(node) : node;
+  }
+
+  #mergedMapValue(
+    map: YAMLMap,
+    key: string | number,
+    visited: Set<YAMLMap>,
+  ): unknown {
+    const direct = map.get(key, true);
+    if (direct !== undefined) return direct;
+    if (visited.has(map)) return undefined;
+    visited.add(map);
+    for (const pair of map.items) {
+      if (!isScalar(pair.key) || typeof pair.key.value !== "symbol") continue;
+      const source = this.#resolveAlias(pair.value);
+      const candidates = isSeq(source) ? source.items : [source];
+      for (const candidate of candidates) {
+        const resolved = this.#resolveAlias(candidate);
+        if (!isMap(resolved)) continue;
+        const value = this.#mergedMapValue(resolved, key, visited);
+        if (value !== undefined) return value;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -205,7 +294,10 @@ export class ComposeDocument {
       const raw = services[name];
       if (!isPlainRecord(raw)) return null;
 
-      const tag = (key: string) => this.getTagAtPath(["services", name, key]);
+      const tag = (key: string) =>
+        this.#hasSequenceTags
+          ? this.getTagAtPath(["services", name, key])
+          : undefined;
       let value = raw;
       for (const key of EXTENDED_SEQUENCES) {
         if (Object.hasOwn(raw, key) && tag(key) === "!reset") {
@@ -250,6 +342,10 @@ export class ComposeDocument {
   /** The effective value of a service key, inherited values included. */
   getMergedServiceValue(name: string, key: string): unknown {
     return this.getMergedService(name)?.[key];
+  }
+
+  inheritsNullSequence(name: string, key: string): boolean {
+    return this.#resolvedServices().get(name)?.localIndices?.get(key) === null;
   }
 
   /** The effective keys of a service, inherited keys included. */
@@ -306,12 +402,12 @@ export class ComposeDocument {
   ): ServiceReportTarget {
     const [key, index, ...rest] = path;
     const service = this.#resolvedServices().get(name);
-    const localIndex =
-      typeof key === "string" && typeof index === "number"
-        ? service?.localIndices?.get(key)?.[index]
-        : undefined;
+    const indices =
+      typeof key === "string" ? service?.localIndices?.get(key) : undefined;
+    const localIndex = typeof index === "number" ? indices?.[index] : undefined;
     const raw = this.getMergedServices()?.[name];
     const fromExtends =
+      indices === null ||
       localIndex === null ||
       (typeof key === "string" &&
         service !== undefined &&
@@ -364,10 +460,19 @@ export class ComposeDocument {
    * which Compose uses in override files).
    */
   getTagAtPath(path: ReadonlyArray<string | number>): string | undefined {
-    const node = this.getNodeAtPath(path);
-    if (node === null || typeof node !== "object") return undefined;
-    const tag = (node as { tag?: unknown }).tag;
-    return typeof tag === "string" ? tag : undefined;
+    let node: unknown = this.doc.contents;
+    for (const key of path) {
+      const resolved = this.#resolveAlias(node);
+      if (isMap(resolved)) {
+        node = this.#mergedMapValue(resolved, key, new Set());
+      } else if (isSeq(resolved)) {
+        node = resolved.get(key, true);
+      } else {
+        return undefined;
+      }
+    }
+    const resolved = this.#resolveAlias(node);
+    return isNode(resolved) ? resolved.tag : undefined;
   }
 
   get root(): YAMLMap | null {

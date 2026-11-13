@@ -31,6 +31,9 @@ Merge keys (`<<`) and `x-*` extension fields do not participate in ordering
 checks. Unknown keys also stay out of the checks and keep their slot when
 `--fix` reorders known keys. [`spec-schema`](spec-schema.md) reports unknown keys.
 
+A reorder that could change which definition a YAML alias points to is reported
+without a fix.
+
 ## Why it matters
 
 There is no single community convention here — a scan of the official [awesome-compose](https://github.com/docker/awesome-compose) samples shows `image`/`build` first and little agreement after that. The value is not in the specific order but in having one: identity first, then how the service starts, then what it talks to, then how much of the host it may use, with privileges grouped so a reviewer can scan them together.

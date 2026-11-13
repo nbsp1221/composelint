@@ -45,8 +45,8 @@ function itemRangeOf(pair: Pair): ItemRange | null {
  * `expected`, keeping position-independent keys (`x-*`, `<<`) at the top
  * and schema-undefined keys in their original slots.
  *
- * Returns null when the mapping cannot be rewritten as whole lines, which is
- * the case for flow mappings such as `web: {image: nginx, ports: []}`.
+ * Returns null for flow mappings or when reordering could change which
+ * definition an alias binds to.
  */
 export function buildReorderEdits(
   document: ComposeDocument,
@@ -98,5 +98,10 @@ export function buildReorderEdits(
   const order = items.map((_, index) =>
     ignoredIndices.has(index) ? index : orderedIndices[orderedIndex++],
   );
-  return reorderEntries(document.source, items, order, options);
+  const edits = reorderEntries(document.source, items, order, options);
+  return edits?.some(({ start, end }) =>
+    document.hasRepeatedAnchorReference(start, end),
+  )
+    ? null
+    : edits;
 }

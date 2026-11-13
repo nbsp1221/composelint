@@ -274,6 +274,116 @@ services:
       expect(ruleIdsFor(yaml, name)).not.toContain("no-cap-add-all");
     }
   });
+
+  it("honors tags from YAML merge lists and aliases", () => {
+    const source = `x-reset: &reset !reset [ALL]
+x-defaults: &defaults
+  ports: !override ["127.0.0.1:8080:80"]
+x-fallback: &fallback
+  ports: [81]
+services:
+  base:
+    image: nginx:1
+    ports: [80]
+    cap_add: [ALL]
+  child:
+    <<: [*defaults, *fallback]
+    extends: base
+    cap_add: *reset
+  local:
+    <<: *defaults
+    extends: base
+    ports: [82]
+  alias:
+    <<: *defaults
+    extends: base
+    cap_add: [NET_ADMIN]
+`;
+    const { document } = lint(source);
+    expect(document.getMergedServiceValue("child", "ports")).toEqual([
+      "127.0.0.1:8080:80",
+    ]);
+    expect(document.getMergedServiceValue("child", "cap_add")).toBeUndefined();
+    expect(ruleIdsFor(source, "child")).not.toContain("no-unbound-ports");
+    expect(ruleIdsFor(source, "child")).not.toContain("no-cap-add-all");
+    expect(document.getMergedServiceValue("local", "ports")).toEqual([80, 82]);
+    expect(ruleIdsFor(source, "alias")).not.toContain("no-unbound-ports");
+  });
+
+  it("inherits arrays through untagged nulls and validates other nulls", () => {
+    const source = `services:
+  base:
+    image: nginx:1
+    ports: [80]
+    cap_add: [ALL]
+  child:
+    extends: base
+    ports: null
+    cap_add: null
+  descendant:
+    extends: child
+    ports: []
+  standalone:
+    image: nginx:1
+    ports: null
+    cap_add: null
+  missing:
+    extends: standalone
+    ports: null
+    cap_add: null
+`;
+    const { document } = lint(source);
+    expect(document.getMergedServiceValue("child", "ports")).toEqual([80]);
+    expect(document.getMergedServiceValue("child", "cap_add")).toEqual(["ALL"]);
+    for (const [name, line] of [
+      ["child", 7],
+      ["descendant", 11],
+    ] as const) {
+      const diagnostics = diagnosticsFor(source, name);
+      expect(
+        diagnostics.filter(({ ruleId }) => ruleId === "spec-schema"),
+      ).toEqual([]);
+      const warnings = diagnostics.filter(({ ruleId }) =>
+        ["no-cap-add-all", "no-unbound-ports"].includes(ruleId),
+      );
+      expect(warnings).toHaveLength(2);
+      expect(warnings.map(({ range }) => range.start.line)).toEqual([
+        line,
+        line,
+      ]);
+    }
+    for (const name of ["standalone", "missing"]) {
+      expect(
+        diagnosticsFor(source, name).filter(
+          ({ ruleId }) => ruleId === "spec-schema",
+        ),
+      ).toHaveLength(2);
+    }
+  });
+
+  it("honors tagged sequence aliases on a whole-service alias", () => {
+    const source = `x-ports: &ports !override ["127.0.0.1:8080:80"]
+x-caps: &caps !reset null
+x-child: &child
+  extends: base
+  ports: *ports
+  cap_add: *caps
+services:
+  base:
+    image: nginx:1
+    ports: [80]
+    cap_add: [ALL]
+  child: *child
+`;
+    const { document } = lint(source);
+    expect(document.getMergedServiceValue("child", "ports")).toEqual([
+      "127.0.0.1:8080:80",
+    ]);
+    expect(document.getMergedServiceValue("child", "cap_add")).toBeUndefined();
+    expect(ruleIdsFor(source, "child")).not.toContain("no-unbound-ports");
+    expect(ruleIdsFor(source, "child")).not.toContain("no-cap-add-all");
+    expect(ruleIdsFor(source, "child")).not.toContain("spec-schema");
+  });
 });
 
 describe("diagnostic location and message", () => {

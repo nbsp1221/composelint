@@ -171,6 +171,58 @@ describe("no-unbound-ports published ports", () => {
     expect(portMessages('\n      - "[::]:4000:4000"')).toHaveLength(1);
   });
 
+  it.each([
+    '"[0000:0:0:0:0:0:0:0]:8080:80"',
+    '"[0::0]:8080:80"',
+    '"[::0.0.0.0]:8080:80"',
+    '{target: 80, published: 8080, host_ip: "0:0:0:0:0:0:0:0"}',
+  ])("reports equivalent IPv6 wildcard %s", (entry) => {
+    expect(portMessages(`\n      - ${entry}`)).toEqual([
+      expect.stringMatching(/on all interfaces \(::\)$/),
+    ]);
+    expect(
+      portMessages(`\n      - ${entry}`, [
+        { service: "web", published: ["8080/tcp"] },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("keeps expanded IPv6 loopback quiet", () => {
+    expect(portMessages('\n      - "[0:0:0:0:0:0:0:1]:8080:80"')).toEqual([]);
+  });
+
+  it("recognizes a published port with nested interpolation without allowlisting its fallback", () => {
+    const entry = `\${API_GW_HTTP_PORT:-\${KONG_HTTP_PORT:-8000}}:8000/tcp`;
+    expect(
+      portMessages(`\n      - "${entry}"`, [
+        { service: "web", published: ["8000/tcp"] },
+      ]),
+    ).toEqual([
+      `Service "web": port "${entry}" is published on all interfaces (0.0.0.0)`,
+    ]);
+  });
+
+  it("keeps an explicit loopback binding around nested interpolation quiet", () => {
+    expect(
+      portMessages(
+        `\n      - "[::1]:\${HTTP_PORT:-\${DEFAULT_PORT:-8000}}:8000/tcp"`,
+      ),
+    ).toEqual([]);
+  });
+
+  it("ignores separators inside the interpolation expression", () => {
+    const entry = `8080:\${TARGET:?set target: see config/path}`;
+    expect(
+      portMessages(`\n      - "${entry}"`, [
+        { service: "web", published: ["8080/tcp"] },
+      ]),
+    ).toEqual([]);
+    expect(portMessages(`\n      - "${entry}"`)).toHaveLength(1);
+    expect(
+      portMessages(`\n      - "\${HOST_BINDING:-127.0.0.1}:8080:80"`),
+    ).toEqual([]);
+  });
+
   it("reports a port range", () => {
     expect(portMessages('\n      - "8000-8010:8000-8010"')).toHaveLength(1);
   });
