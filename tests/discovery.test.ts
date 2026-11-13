@@ -188,6 +188,21 @@ describe("file discovery", () => {
     expect(result.skipped).toEqual(["examples/compose.yaml"]);
   });
 
+  it("walks an excluded directory only when a negation can reach it", async () => {
+    const keep = join(dir, "examples", "deep", "keep");
+    await mkdir(keep, { recursive: true });
+    await writeFile(join(keep, "compose.yaml"), "services: {}\n");
+    const isExcluded = createPathMatcher(DEFAULT_EXCLUDE, dir, {
+      patterns: ["examples", "!examples/**/keep"],
+      baseDir: dir,
+    });
+    expect(isExcluded.canPruneDirectory(join(dir, "examples"))).toBe(false);
+    expect(isExcluded.canPruneDirectory(join(dir, "node_modules"))).toBe(true);
+    expect(await findComposeFiles("examples", isExcluded)).toEqual([
+      join("examples", "deep", "keep", "compose.yaml"),
+    ]);
+  });
+
   it("reports missing targets", async () => {
     const isExcluded = createPathMatcher([], dir);
     const result = await resolveTargets(["nope.yaml"], isExcluded);

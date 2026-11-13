@@ -13,14 +13,15 @@ export interface LintFilesOptions {
   isPartial: (filePath: string) => boolean;
   /** Absolute paths reached through a top-level `include:`. */
   includedPaths: ReadonlySet<string>;
-  /** Whether to write fixes back to disk. */
-  fix: boolean;
+  fixMode: "off" | "write" | "dry-run";
 }
 
 export interface LintFilesResult {
   /** One result per file, before any `--quiet` filtering. */
   results: LintResult[];
   fixedCount: number;
+  /** Proposed contents of changed files, only in dry-run mode. */
+  previews: SourceFile[];
   /** Files that could not be written, described for the user. */
   writeFailures: string[];
 }
@@ -35,6 +36,7 @@ export async function lintFiles(
   options: LintFilesOptions,
 ): Promise<LintFilesResult> {
   const results: LintResult[] = [];
+  const previews: SourceFile[] = [];
   const writeFailures: string[] = [];
   let fixedCount = 0;
 
@@ -45,7 +47,7 @@ export async function lintFiles(
         options.includedPaths.has(resolve(filePath)),
     };
 
-    if (!options.fix) {
+    if (options.fixMode === "off") {
       results.push(
         lintSource(source, filePath, options.rules, options.config, lintOptions)
           .result,
@@ -64,6 +66,11 @@ export async function lintFiles(
 
     if (!outcome.changed) continue;
 
+    if (options.fixMode === "dry-run") {
+      previews.push({ filePath, source: outcome.source });
+      continue;
+    }
+
     try {
       await writeFile(filePath, outcome.source, "utf-8");
       fixedCount++;
@@ -72,5 +79,5 @@ export async function lintFiles(
     }
   }
 
-  return { results, fixedCount, writeFailures };
+  return { results, fixedCount, previews, writeFailures };
 }

@@ -264,6 +264,139 @@ describe("--fix", () => {
   });
 });
 
+describe("--fix-dry-run", () => {
+  it("previews changed text on stdout and leaves every file byte-for-byte unchanged", async () => {
+    const original = Buffer.from(WITH_ERROR.replaceAll("\n", "\r\n"));
+    const dir = await workspace({
+      "compose.yaml": original.toString(),
+      "compose.clean.yaml": CLEAN,
+    });
+    const result = await cliRun(dir, ["--fix-dry-run", "--max-warnings", "0"]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("--- compose.yaml (after fixes) ---\n");
+    expect(result.stdout).toContain(CLEAN.replaceAll("\n", "\r\n"));
+    expect(result.stdout).toContain("Would fix 1 file\n");
+    expect(result.stdout).not.toContain("compose.clean.yaml");
+    expect(result.stdout).not.toContain("no-version-field");
+    expect(result.stderr).toBe("");
+    expect(await readFile(join(dir, "compose.yaml"))).toEqual(original);
+    expect(await readFile(join(dir, "compose.clean.yaml"))).toEqual(
+      Buffer.from(CLEAN),
+    );
+  });
+
+  it.each(["json", "sarif"])(
+    "keeps %s stdout clean and counts warnings remaining after fixes",
+    async (format) => {
+      const source = `version: "3.8"\n${WITH_WARNINGS}`;
+      const dir = await workspace({ "compose.yaml": source });
+      const result = await cliRun(dir, [
+        "--fix-dry-run",
+        "--format",
+        format,
+        "--quiet",
+        "--max-warnings",
+        "0",
+      ]);
+
+      expect(result.code).toBe(1);
+      const output = JSON.parse(result.stdout);
+      if (format === "json") {
+        expect(output.files[0].diagnostics).toEqual([]);
+      } else {
+        expect(output.runs[0].results).toEqual([]);
+      }
+      expect(result.stderr).toContain(WITH_WARNINGS);
+      expect(result.stderr).toContain("Would fix 1 file");
+      expect(result.stderr).toContain("--max-warnings limit of 0");
+      expect(await readFile(join(dir, "compose.yaml"), "utf-8")).toBe(source);
+    },
+  );
+
+  it("rejects --fix together with --fix-dry-run before writing", async () => {
+    const dir = await workspace({ "compose.yaml": WITH_ERROR });
+    const result = await cliRun(dir, ["--fix", "--fix-dry-run"]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain(
+      "--fix and --fix-dry-run cannot be used together",
+    );
+    expect(await readFile(join(dir, "compose.yaml"), "utf-8")).toBe(WITH_ERROR);
+  });
+
+  it("reports errors that remain at their positions in the proposed text", async () => {
+    const source =
+      'version: "3.8"\nname: qa\nservices:\n  web:\n    image: []\n';
+    const dir = await workspace({ "compose.yaml": source });
+    const result = await cliRun(dir, ["--fix-dry-run", "--format", "json"]);
+
+    expect(result.code).toBe(1);
+    expect(JSON.parse(result.stdout).files[0].diagnostics).toContainEqual(
+      expect.objectContaining({ ruleId: "spec-schema", line: 4 }),
+    );
+    expect(result.stdout).not.toContain("no-version-field");
+    expect(await readFile(join(dir, "compose.yaml"), "utf-8")).toBe(source);
+  });
+});
+
+describe("--exclude", () => {
+  it("applies config-relative patterns before ordered cwd-relative patterns", async () => {
+    const root = await workspace({
+      ".composelintrc.json": JSON.stringify({ exclude: ["app/examples"] }),
+      "app/examples/keep/compose.yaml": CLEAN,
+      "app/examples/keep/compose.drop.yaml": WITH_ERROR,
+      "app/examples/compose.yaml": WITH_ERROR,
+      "app/generated/compose.yaml": WITH_ERROR,
+    });
+    const result = await cliRun(join(root, "app"), [
+      "--exclude",
+      "generated",
+      "--exclude=!examples/keep",
+      "--exclude",
+      "**/compose.drop.yaml",
+      "--format",
+      "json",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.stdout).files).toEqual([
+      { path: join("examples", "keep", "compose.yaml"), diagnostics: [] },
+    ]);
+  });
+
+  it.each(["json", "sarif"])(
+    "skips an explicitly named file and emits empty %s output",
+    async (format) => {
+      const dir = await workspace({ "compose.yaml": WITH_ERROR });
+      const result = await cliRun(dir, [
+        "--exclude=compose.yaml",
+        "compose.yaml",
+        "--fix-dry-run",
+        "--format",
+        format,
+      ]);
+
+      expect(result.code).toBe(0);
+      const output = JSON.parse(result.stdout);
+      expect(format === "json" ? output.files : output.runs[0].results).toEqual(
+        [],
+      );
+      expect(result.stderr).toContain(
+        '"compose.yaml" is excluded by exclude patterns',
+      );
+      expect(result.stderr).not.toContain("Would fix");
+    },
+  );
+
+  it("reports a missing value as a usage error", async () => {
+    const dir = await workspace({ "compose.yaml": CLEAN });
+    const result = await cliRun(dir, ["--exclude", "--fix"]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("--exclude requires");
+  });
+});
+
 describe("partial files", () => {
   it("does not ask an override file for a project name or healthchecks", async () => {
     const dir = await workspace({

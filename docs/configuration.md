@@ -116,7 +116,22 @@ Semantics follow ESLint's `ignores`:
 - Later patterns win, so order matters.
 - Paths outside the configuration file's directory never match.
 
-Naming a file explicitly on the command line does not override `exclude`; the file is skipped and the reason is printed.
+Use `--exclude <glob>` or `--exclude=<glob>` for exclusions on a single run.
+Repeat the option for each pattern and use forward slashes in globs. CLI
+patterns run in argument order after the built-in and configuration patterns.
+They match paths inside the working directory. Configuration patterns keep
+their own base directory.
+
+```sh
+composelint --exclude 'generated/**' --exclude '!generated/keep/**'
+```
+
+The later pattern can re-include files inside an excluded directory during
+discovery. The walker still skips dot-directories and only discovers Compose
+file names. An explicitly named file that matches the final exclusions is
+skipped and reported on stderr. A missing target is a usage error even if its
+name matches an exclusion. When no files remain, the CLI exits successfully
+and JSON or SARIF reports contain no results.
 
 ## `partials`
 
