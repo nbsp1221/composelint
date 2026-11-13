@@ -68,6 +68,8 @@ describe("presets", () => {
       const optIn = [
         "services-alphabetical-order",
         "service-dependencies-alphabetical-order",
+        "service-ports-alphabetical-order",
+        "require-quotes-in-ports",
       ].includes(meta.name);
       expect(presets.recommended[meta.name] === "off", meta.name).toBe(optIn);
       expect(presets.strict[meta.name], meta.name).toBe(

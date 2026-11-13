@@ -10,8 +10,10 @@ import { noPrivileged } from "./security/no-privileged.js";
 import { noUnboundPorts } from "./security/no-unbound-ports.js";
 import { specSchema } from "./spec/spec-schema.js";
 import { noVersionField } from "./style/no-version-field.js";
+import { requireQuotesInPorts } from "./style/require-quotes-in-ports.js";
 import { serviceDependenciesAlphabeticalOrder } from "./style/service-dependencies-alphabetical-order.js";
 import { serviceKeyOrder } from "./style/service-key-order.js";
+import { servicePortsAlphabeticalOrder } from "./style/service-ports-alphabetical-order.js";
 import { servicesAlphabeticalOrder } from "./style/services-alphabetical-order.js";
 import { topLevelOrder } from "./style/top-level-order.js";
 
@@ -23,6 +25,8 @@ export const allRules: Rule[] = [
   serviceKeyOrder,
   servicesAlphabeticalOrder,
   serviceDependenciesAlphabeticalOrder,
+  servicePortsAlphabeticalOrder,
+  requireQuotesInPorts,
   noVersionField,
   // Security
   noPrivileged,
@@ -48,8 +52,10 @@ export {
   noVersionField,
   requireHealthcheck,
   requireName,
+  requireQuotesInPorts,
   serviceDependenciesAlphabeticalOrder,
   serviceKeyOrder,
+  servicePortsAlphabeticalOrder,
   servicesAlphabeticalOrder,
   specSchema,
   topLevelOrder,

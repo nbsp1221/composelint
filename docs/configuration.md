@@ -81,6 +81,8 @@ Severities are `"error"` / `"warn"` / `"off"`, or `2` / `1` / `0`.
 To opt in to alphabetical ordering, set
 `"services-alphabetical-order": "warn"` or
 `"service-dependencies-alphabetical-order": "warn"` in `rules`.
+For port style, opt in with `"service-ports-alphabetical-order": "warn"`
+or `"require-quotes-in-ports": "warn"`.
 
 Options go in the second element of the array form, or under `options` in the object form:
 

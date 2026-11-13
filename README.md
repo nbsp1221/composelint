@@ -110,6 +110,8 @@ Legend: 💼 error in the preset · ⚠️ warning in the preset · 🚫 off in 
 | [service-key-order](docs/rules/service-key-order.md) | style | ⚠️ | 💼 | 🔧 | ⚙️ |
 | [services-alphabetical-order](docs/rules/services-alphabetical-order.md) | style | 🚫 | 🚫 | 🔧 | |
 | [service-dependencies-alphabetical-order](docs/rules/service-dependencies-alphabetical-order.md) | style | 🚫 | 🚫 | 🔧 | |
+| [service-ports-alphabetical-order](docs/rules/service-ports-alphabetical-order.md) | style | 🚫 | 🚫 | | |
+| [require-quotes-in-ports](docs/rules/require-quotes-in-ports.md) | style | 🚫 | 🚫 | 🔧 | |
 | [no-version-field](docs/rules/no-version-field.md) | style | 💼 | 💼 | 🔧 | |
 | [no-privileged](docs/rules/no-privileged.md) | security | ⚠️ | 💼 | | |
 | [no-host-network](docs/rules/no-host-network.md) | security | ⚠️ | 💼 | | |
