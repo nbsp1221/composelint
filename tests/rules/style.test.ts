@@ -8,7 +8,13 @@ import {
   DEFAULT_TOP_LEVEL_ORDER,
   SERVICE_KEY_GROUPS,
 } from "../../src/rules/style/key-order.js";
-import { lint, messagesFor, recommended, ruleIds } from "../helpers.js";
+import {
+  diagnosticsFor,
+  lint,
+  messagesFor,
+  recommended,
+  ruleIds,
+} from "../helpers.js";
 
 function fixSource(source: string, config = recommended) {
   return lintAndFix(source, "compose.yaml", allRules, config);
@@ -127,13 +133,23 @@ describe("service-key-order schema-undefined keys", () => {
     ).toBe(false);
   });
 
-  it("fix moves the defined keys only and keeps the undefined one pinned", () => {
+  it("fixes known keys around an unknown key, its comments and its alias", () => {
     const source =
-      "services:\n  app:\n    image: nginx:1.29\n    restartt: x\n    ports:\n      - '8080:80'\n    container_name: app\n";
+      "services:\n  app:\n    image: &image nginx:1.29\n    # typo\n    restartt: *image # keep\n    ports:\n      - '8080:80'\n    container_name: app\n";
     const { source: fixed } = fixSource(source);
     expect(fixed).toBe(
-      "services:\n  app:\n    restartt: x\n    image: nginx:1.29\n    container_name: app\n    ports:\n      - '8080:80'\n",
+      "services:\n  app:\n    image: &image nginx:1.29\n    # typo\n    restartt: *image # keep\n    container_name: app\n    ports:\n      - '8080:80'\n",
     );
+    expect(fixSource(fixed).changed).toBe(false);
+  });
+
+  it("reports misordered keys without offering a fix that would break an alias", () => {
+    const source =
+      "services:\n  app:\n    ports: &ports ['8080:80']\n    restartt: *ports\n    image: nginx:1.29\n";
+    expect(diagnosticsFor(source, "service-key-order")).toMatchObject([
+      { fix: undefined },
+    ]);
+    expect(fixSource(source).source).toBe(source);
   });
 
   it("keeps several undefined keys in their relative order on fix", () => {
@@ -141,7 +157,7 @@ describe("service-key-order schema-undefined keys", () => {
       "services:\n  app:\n    restartt: x\n    image: nginx:1.29\n    foo: 1\n    ports:\n      - '8080:80'\n    container_name: app\n";
     const { source: fixed } = fixSource(source);
     expect(fixed).toBe(
-      "services:\n  app:\n    restartt: x\n    foo: 1\n    image: nginx:1.29\n    container_name: app\n    ports:\n      - '8080:80'\n",
+      "services:\n  app:\n    restartt: x\n    image: nginx:1.29\n    foo: 1\n    container_name: app\n    ports:\n      - '8080:80'\n",
     );
   });
 
@@ -179,13 +195,26 @@ describe("top-level-order schema-undefined keys", () => {
     ).toContain("top-level-order");
   });
 
-  it("fix keeps the undefined key pinned at the top", () => {
+  it("fix keeps the unknown top-level key and its comments in the same slot", () => {
     const { source: fixed } = fixSource(
-      "foo: 1\nservices:\n  app:\n    image: nginx:1.29\nname: demo\n",
+      "services:\n  app:\n    image: nginx:1.29\n# typo\nfoo: 1 # keep\nname: demo\n",
     );
     expect(fixed).toBe(
-      "foo: 1\nname: demo\nservices:\n  app:\n    image: nginx:1.29\n",
+      "name: demo\n# typo\nfoo: 1 # keep\nservices:\n  app:\n    image: nginx:1.29\n",
     );
+  });
+
+  it("offers no fix when reordering would bind an alias to a different anchor", () => {
+    const source = `services:
+  app:
+    image: &value nginx:1.29
+foo: *value
+name: &value demo
+`;
+    expect(diagnosticsFor(source, "top-level-order")).toMatchObject([
+      { fix: undefined },
+    ]);
+    expect(fixSource(source).source).toBe(source);
   });
 });
 

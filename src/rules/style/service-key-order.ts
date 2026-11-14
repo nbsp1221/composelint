@@ -2,6 +2,14 @@ import type { Rule, RuleContext } from "../../core/types.js";
 import { DEFAULT_SERVICE_KEY_ORDER, schemaServiceKeys } from "./key-order.js";
 import { buildReorderEdits, expectedOrder } from "./ordering.js";
 
+function isPinned(key: string): boolean {
+  return key === "<<" || key.startsWith("x-");
+}
+
+function isUnknown(key: string): boolean {
+  return !schemaServiceKeys.has(key);
+}
+
 export const serviceKeyOrder: Rule = {
   meta: {
     name: "service-key-order",
@@ -15,11 +23,6 @@ export const serviceKeyOrder: Rule = {
     const order =
       (context.options.order as string[] | undefined) ??
       DEFAULT_SERVICE_KEY_ORDER;
-    // Merge keys, `x-*` extensions, and schema-undefined keys are pinned.
-    // Reordering keeps the pinned entries together in source order while it
-    // reorders only schema-defined keys.
-    const isPinned = (key: string): boolean =>
-      key === "<<" || key.startsWith("x-") || !schemaServiceKeys.has(key);
     const servicesMap = context.document.getServicesMap();
     if (!servicesMap) return;
 
@@ -28,9 +31,10 @@ export const serviceKeyOrder: Rule = {
       const svcMap = context.document.getServiceMap(serviceName);
       if (!svcMap) continue;
 
-      const orderable = svcMap.items.filter(
-        (pair) => !isPinned(context.document.pairKeyName(pair)),
-      );
+      const orderable = svcMap.items.filter((pair) => {
+        const key = context.document.pairKeyName(pair);
+        return !isPinned(key) && !isUnknown(key);
+      });
       const keys = orderable.map((pair) => context.document.pairKeyName(pair));
       const expected = expectedOrder(keys, order);
 
@@ -41,9 +45,16 @@ export const serviceKeyOrder: Rule = {
           message: `Service "${serviceName}": key "${keys[i]}" is out of order (expected "${expected[i]}" at position ${i + 1})`,
           node: orderable[i].key as { range?: [number, number, number] },
           fix: () =>
-            buildReorderEdits(context.document, svcMap, isPinned, expected, {
-              includeLeadingComments: true,
-            }),
+            buildReorderEdits(
+              context.document,
+              svcMap,
+              isPinned,
+              isUnknown,
+              expected,
+              {
+                includeLeadingComments: true,
+              },
+            ),
         });
         break;
       }

@@ -14,8 +14,7 @@ import composeSpecSchema from "../../../schemas/compose-spec.json" with {
  *   what makes an ordering opinion reviewable rather than arbitrary.
  *
  * Every currently defined key appears here once. Keys outside the schema are
- * not given an ordering slot; the rules keep them in the pinned group and
- * preserve their relative order during fixes.
+ * not ordered; fixes preserve their original mapping positions.
  */
 export const SERVICE_KEY_GROUPS = {
   /** What this service inherits from, before anything it defines itself. */
@@ -178,7 +177,7 @@ export const DEFAULT_TOP_LEVEL_ORDER: string[] = [
  *
  * The ordering rules use these sets to distinguish a schema key omitted from
  * an `order` option (still ordered, after configured keys) from a key absent
- * from the schema (pinned, because spec-schema reports it).
+ * from the schema (reported by spec-schema and left in its original slot).
  */
 function schemaKeySet(pointer: "service" | "top"): ReadonlySet<string> {
   const schema = composeSpecSchema as {
