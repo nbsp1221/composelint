@@ -8,7 +8,13 @@ import {
   DEFAULT_TOP_LEVEL_ORDER,
   SERVICE_KEY_GROUPS,
 } from "../../src/rules/style/key-order.js";
-import { lint, messagesFor, recommended, ruleIds } from "../helpers.js";
+import {
+  diagnosticsFor,
+  lint,
+  messagesFor,
+  recommended,
+  ruleIds,
+} from "../helpers.js";
 
 function fixSource(source: string, config = recommended) {
   return lintAndFix(source, "compose.yaml", allRules, config);
@@ -94,6 +100,146 @@ describe("no-version-field no-version-field", () => {
     );
     expect(fixed).not.toContain("version");
     expect(fixed).toContain("services:");
+  });
+});
+
+describe("service-key-order schema-undefined keys", () => {
+  it("reports an undefined key only through spec-schema", () => {
+    const diagnostics = lint(
+      "services:\n  app:\n    image: nginx:1.29\n    restartt: unless-stopped\n    ports:\n      - '8080:80'\n",
+    ).diagnostics;
+    expect(diagnostics.filter((d) => d.ruleId === "spec-schema")).toHaveLength(
+      1,
+    );
+    expect(
+      diagnostics.filter((d) => d.ruleId === "service-key-order"),
+    ).toHaveLength(0);
+  });
+
+  it("leaves such a key in place when the rest is in order", () => {
+    const source =
+      "services:\n  app:\n    image: nginx:1.29\n    restartt: unless-stopped\n    ports:\n      - '8080:80'\n";
+    expect(fixSource(source).changed).toBe(false);
+  });
+
+  it("still checks keys the specification defines, around an undefined key", () => {
+    const source =
+      "services:\n  app:\n    image: nginx:1.29\n    restartt: x\n    ports:\n      - '8080:80'\n    container_name: app\n";
+    expect(ruleIds(source)).toContain("service-key-order");
+    expect(
+      messagesFor(source, "service-key-order").some((m) =>
+        m.includes("restartt"),
+      ),
+    ).toBe(false);
+  });
+
+  it("fixes known keys around an unknown key, its comments and its alias", () => {
+    const source =
+      "services:\n  app:\n    image: &image nginx:1.29\n    # typo\n    restartt: *image # keep\n    ports:\n      - '8080:80'\n    container_name: app\n";
+    const { source: fixed } = fixSource(source);
+    expect(fixed).toBe(
+      "services:\n  app:\n    image: &image nginx:1.29\n    # typo\n    restartt: *image # keep\n    container_name: app\n    ports:\n      - '8080:80'\n",
+    );
+    expect(fixSource(fixed).changed).toBe(false);
+  });
+
+  it("reports misordered keys without offering a fix that would break an alias", () => {
+    const source =
+      "services:\n  app:\n    ports: &ports ['8080:80']\n    restartt: *ports\n    image: nginx:1.29\n";
+    expect(diagnosticsFor(source, "service-key-order")).toMatchObject([
+      { fix: undefined },
+    ]);
+    expect(fixSource(source).source).toBe(source);
+  });
+
+  it("keeps several undefined keys in their relative order on fix", () => {
+    const source =
+      "services:\n  app:\n    restartt: x\n    image: nginx:1.29\n    foo: 1\n    ports:\n      - '8080:80'\n    container_name: app\n";
+    const { source: fixed } = fixSource(source);
+    expect(fixed).toBe(
+      "services:\n  app:\n    restartt: x\n    image: nginx:1.29\n    foo: 1\n    container_name: app\n    ports:\n      - '8080:80'\n",
+    );
+  });
+
+  it("does not report a flow-mapping service whose defined keys surround an undefined one", () => {
+    expect(
+      ruleIds(
+        "services:\n  app: { image: nginx:1.29, restartt: x, ports: ['80:80'] }\n",
+      ),
+    ).not.toContain("service-key-order");
+  });
+
+  it("does not report a service whose undefined key is the only one out of place", () => {
+    expect(
+      ruleIds("services:\n  app:\n    image: nginx:1.29\n    restartt: 'x'\n"),
+    ).not.toContain("service-key-order");
+  });
+});
+
+describe("top-level-order schema-undefined keys", () => {
+  it("reports an undefined key only through spec-schema", () => {
+    const diagnostics = lint(
+      "name: demo\nfoo: 1\nservices:\n  app:\n    image: nginx:1.29\n",
+    ).diagnostics;
+    expect(diagnostics.filter((d) => d.ruleId === "spec-schema")).toHaveLength(
+      1,
+    );
+    expect(
+      diagnostics.filter((d) => d.ruleId === "top-level-order"),
+    ).toHaveLength(0);
+  });
+
+  it("still checks defined top-level keys around an undefined one", () => {
+    expect(
+      ruleIds("foo: 1\nservices:\n  app:\n    image: nginx:1.29\nname: demo\n"),
+    ).toContain("top-level-order");
+  });
+
+  it("fix keeps the unknown top-level key and its comments in the same slot", () => {
+    const { source: fixed } = fixSource(
+      "services:\n  app:\n    image: nginx:1.29\n# typo\nfoo: 1 # keep\nname: demo\n",
+    );
+    expect(fixed).toBe(
+      "name: demo\n# typo\nfoo: 1 # keep\nservices:\n  app:\n    image: nginx:1.29\n",
+    );
+  });
+
+  it("offers no fix when reordering would bind an alias to a different anchor", () => {
+    const source = `services:
+  app:
+    image: &value nginx:1.29
+foo: *value
+name: &value demo
+`;
+    expect(diagnosticsFor(source, "top-level-order")).toMatchObject([
+      { fix: undefined },
+    ]);
+    expect(fixSource(source).source).toBe(source);
+  });
+});
+
+describe("order option and schema-undefined keys", () => {
+  it("an option order cannot order a key the specification does not define", () => {
+    const config = resolveConfig({
+      rules: {
+        "service-key-order": ["warn", { order: ["restartt", "image"] }],
+      },
+    });
+    const source =
+      "services:\n  app:\n    restartt: x\n    image: nginx:1.29\n";
+    expect(ruleIds(source, config)).not.toContain("service-key-order");
+  });
+
+  it("a schema key missing from an option order still sorts last", () => {
+    const config = resolveConfig({
+      rules: { "service-key-order": ["warn", { order: ["ports"] }] },
+    });
+    const source =
+      "services:\n  app:\n    image: nginx:1.29\n    ports:\n      - '80:80'\n";
+    expect(ruleIds(source, config)).toContain("service-key-order");
+    expect(messagesFor(source, "service-key-order", config)).toEqual([
+      'Service "app": key "image" is out of order (expected "ports" at position 1)',
+    ]);
   });
 });
 

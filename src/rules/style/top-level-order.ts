@@ -1,13 +1,13 @@
 import type { Rule, RuleContext } from "../../core/types.js";
-import { DEFAULT_TOP_LEVEL_ORDER } from "./key-order.js";
+import { DEFAULT_TOP_LEVEL_ORDER, schemaTopLevelKeys } from "./key-order.js";
 import { buildReorderEdits, expectedOrder } from "./ordering.js";
 
-/**
- * Keys that are not ordered: `x-*` extension fields may appear anywhere, and
- * `version` is obsolete, so no-version-field asks for its removal instead of a position.
- */
 function isPinned(key: string): boolean {
   return key.startsWith("x-") || key === "version";
+}
+
+function isUnknown(key: string): boolean {
+  return !schemaTopLevelKeys.has(key);
 }
 
 export const topLevelOrder: Rule = {
@@ -26,9 +26,10 @@ export const topLevelOrder: Rule = {
     const root = context.document.root;
     if (!root) return;
 
-    const orderable = root.items.filter(
-      (pair) => !isPinned(context.document.pairKeyName(pair)),
-    );
+    const orderable = root.items.filter((pair) => {
+      const key = context.document.pairKeyName(pair);
+      return !isPinned(key) && !isUnknown(key);
+    });
     const keys = orderable.map((pair) => context.document.pairKeyName(pair));
     const expected = expectedOrder(keys, order);
 
@@ -41,7 +42,13 @@ export const topLevelOrder: Rule = {
         } (expected "${expected[i]}" at position ${i + 1})`,
         node: orderable[i].key as { range?: [number, number, number] },
         fix: () =>
-          buildReorderEdits(context.document, root, isPinned, expected),
+          buildReorderEdits(
+            context.document,
+            root,
+            isPinned,
+            isUnknown,
+            expected,
+          ),
       });
       break;
     }

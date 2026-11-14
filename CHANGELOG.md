@@ -9,6 +9,10 @@ the Node API may change in a minor release. Such changes are listed here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `service-key-order` and `top-level-order` leave unknown keys to `spec-schema`. Ordering fixes keep those keys and their comments in their original slots and are offered only when YAML aliases keep the same targets.
+
 ## [0.2.0] - 2026-08-12
 
 ### Added
