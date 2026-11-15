@@ -140,20 +140,16 @@ describe("opt-in port style", () => {
     const source = `services:
   app:
     ports:
-      # web
-      - target: 90
+      - target: 90 # web
         published: "9000"
         protocol: tcp
-      # api
-      - "8000:80"
+      - "8000:80" # api
 `;
     const expected = `services:
   app:
     ports:
-      # api
-      - "8000:80"
-      # web
-      - target: 90
+      - "8000:80" # api
+      - target: 90 # web
         published: "9000"
         protocol: tcp
 `;
@@ -162,26 +158,51 @@ describe("opt-in port style", () => {
     expect(lintAndFix(fixed.source, file, rules, config).changed).toBe(false);
   });
 
-  it("moves comments with their bindings, retaining unrelated comments", () => {
-    const source = `# project header
-services:
+  it("does not move a multiline long-form scalar", () => {
+    const source = `services:
   app:
     ports:
-      # web
-      - "9000:90" # web inline
-      # api
-      - "8000:80" # api inline
+      - target: 90
+        published: "9000"
+        name: |-
+          web
+      - "8000:80"
 `;
-    const expected = `# project header
-services:
+    expect(lintAndFix(source, file, rules, config).source).toBe(source);
+  });
+
+  it("does not move an ambiguous standalone list heading", () => {
+    const source = `services:
   app:
     ports:
-      # api
-      - "8000:80" # api inline
-      # web
-      - "9000:90" # web inline
+      # Public endpoints for the application
+      - "9000:90"
+      - "8000:80"
 `;
-    expect(lintAndFix(source, file, rules, config).source).toBe(expected);
+    expect(lintAndFix(source, file, rules, config).source).toBe(source);
+  });
+
+  it("does not move entries below a standalone heading separated by a blank line", () => {
+    const source = `services:
+  app:
+    ports:
+      # Public endpoints
+
+      - "9000:90"
+      - "8000:80"
+`;
+    expect(lintAndFix(source, file, rules, config).source).toBe(source);
+  });
+
+  it("does not move standalone comments between entries", () => {
+    const source = `services:
+  app:
+    ports:
+      - "9000:90"
+      # This could describe a group rather than the next entry.
+      - "8000:80"
+`;
+    expect(lintAndFix(source, file, rules, config).source).toBe(source);
   });
 
   it("stably sorts fixed duplicates without changing their relative precedence", () => {

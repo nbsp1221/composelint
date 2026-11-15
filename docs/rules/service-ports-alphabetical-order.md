@@ -9,22 +9,21 @@
 
 ## What it does
 
-Checks ascending numeric order by published host port within each run of
-adjacent, fixed single-port bindings in a locally declared `ports` list.
-Short and long forms can appear in the same run. Bindings with the same
-published number can appear in either order.
-
-Short-form ranges and target-only ports, plus short- or long-form published
-variable expressions, are compared as written rather than by their runtime values. Aliases and unsupported
-bindings break a run. The rule skips inherited lists and reset declarations.
+Checks ordering by the written published port in locally declared `ports` lists.
+Literal ports sort numerically. Short-form ranges, target-only ports and
+short- or long-form variable expressions are compared as written, not by their
+unknown runtime values. Aliases and unsupported bindings break a run. The
+rule skips inherited lists and reset declarations.
 
 ## Why it matters
 
-Numeric ordering helps reviewers find a particular host port. Automatic fixes are limited to block lists of literal fixed short or long bindings and disjoint equal-length
-short-form ranges
-with their attached comments. Bindings with the same published port keep their
-relative order. Overlapping ranges and dynamic allocation pools are not fixed. Files with anchors or aliases, or lists with nearby suppression
-directives are reported without a fix.
+Ordering helps reviewers find a particular port. Automatic fixes are limited
+to block lists of fixed short or long bindings and disjoint equal-length
+short-form ranges. Inline comments move with their bindings. Standalone
+comments are report-only because their attachment may be ambiguous. Bindings
+with the same published port keep their relative order. Overlapping ranges,
+dynamic allocation pools, files with anchors or aliases, nearby suppression
+directives and multiline scalars are not automatically fixed.
 
 ## Incorrect
 

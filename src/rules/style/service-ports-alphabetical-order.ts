@@ -11,7 +11,11 @@ import {
 import { parsePublishedPort } from "../../core/ports.js";
 import { reorderEntries } from "../../core/text-edit.js";
 import type { Rule } from "../../core/types.js";
-import { hasNearbyDirective, hasShallowComment } from "./alphabetical-order.js";
+import {
+  canMoveCollection,
+  hasNearbyDirective,
+  hasShallowComment,
+} from "./alphabetical-order.js";
 import { localPortLists } from "./local-port-lists.js";
 
 const PORT_ORDER = new Intl.Collator("en", { numeric: true });
@@ -170,7 +174,13 @@ export const servicePortsAlphabeticalOrder: Rule = {
             fix: () => {
               // Reorder only a complete list of fixed literal bindings.
               // Anchor and alias references can make sequence order observable elsewhere.
-              if (list.flow || list.anchor || containsReferences()) return null;
+              if (
+                !canMoveCollection(list) ||
+                list.anchor ||
+                list.commentBefore ||
+                containsReferences()
+              )
+                return null;
               const values = list.items.map(fixedInterval);
               if (
                 !values.every(
@@ -230,8 +240,12 @@ export const servicePortsAlphabeticalOrder: Rule = {
                   newline: context.document.source.match(/\r?\n/)?.[0],
                 },
               );
-              return edits?.some(({ start, end }) =>
-                hasNearbyDirective(context.document.source, start, end),
+              return edits?.some(
+                ({ start, end }) =>
+                  hasNearbyDirective(context.document.source, start, end) ||
+                  /(?:^|\n)[ \t]*#/.test(
+                    context.document.source.slice(start, end),
+                  ),
               )
                 ? null
                 : edits;

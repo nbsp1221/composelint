@@ -64,7 +64,7 @@ function namedSequenceEntries(sequence: YAMLSeq): NamedEntry[] {
   });
 }
 
-function canMoveCollection(collection: YAMLMap | YAMLSeq): boolean {
+export function canMoveCollection(collection: YAMLMap | YAMLSeq): boolean {
   if (collection.flow) return false;
   if (collection.tag && collection.tag !== "!override") return false;
 
