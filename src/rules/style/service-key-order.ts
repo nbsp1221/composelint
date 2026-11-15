@@ -2,13 +2,12 @@ import type { Rule, RuleContext } from "../../core/types.js";
 import { DEFAULT_SERVICE_KEY_ORDER, schemaServiceKeys } from "./key-order.js";
 import { buildReorderEdits, expectedOrder } from "./ordering.js";
 
-/** Merge keys and `x-*` extensions may appear anywhere within a service. */
 function isPinned(key: string): boolean {
   return key === "<<" || key.startsWith("x-");
 }
 
-function isIgnored(key: string): boolean {
-  return !isPinned(key) && !schemaServiceKeys.has(key);
+function isUnknown(key: string): boolean {
+  return !schemaServiceKeys.has(key);
 }
 
 export const serviceKeyOrder: Rule = {
@@ -34,7 +33,7 @@ export const serviceKeyOrder: Rule = {
 
       const orderable = svcMap.items.filter((pair) => {
         const key = context.document.pairKeyName(pair);
-        return !isPinned(key) && !isIgnored(key);
+        return !isPinned(key) && !isUnknown(key);
       });
       const keys = orderable.map((pair) => context.document.pairKeyName(pair));
       const expected = expectedOrder(keys, order);
@@ -50,7 +49,7 @@ export const serviceKeyOrder: Rule = {
               context.document,
               svcMap,
               isPinned,
-              isIgnored,
+              isUnknown,
               expected,
               {
                 includeLeadingComments: true,

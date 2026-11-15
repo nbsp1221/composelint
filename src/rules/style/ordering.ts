@@ -1,4 +1,11 @@
-import type { Pair, YAMLMap } from "yaml";
+import {
+  isAlias,
+  isNode,
+  type Node,
+  type Pair,
+  visit,
+  type YAMLMap,
+} from "yaml";
 import type { ComposeDocument } from "../../core/document.js";
 import {
   type ItemRange,
@@ -14,8 +21,8 @@ function orderIndex(key: string, order: readonly string[]): number {
 }
 
 /**
- * The expected key sequence: known keys in the configured order, then keys the
- * order does not mention, keeping their relative positions.
+ * The expected key sequence: keys mentioned in the configured order first,
+ * followed by keys the order omits, keeping their relative positions.
  */
 export function expectedOrder(
   keys: readonly string[],
@@ -46,18 +53,64 @@ export function itemRangeOf(
 }
 
 /**
+ * Compare alias targets by node identity so a move cannot leave an alias
+ * unresolved or bind it to a different anchor with the same name.
+ */
+function preservesAliasTargets(
+  document: ComposeDocument,
+  map: YAMLMap,
+  order: readonly number[],
+): boolean {
+  let hasReferences = false;
+  visit(map, {
+    Node: (_key, node) => {
+      if (isAlias(node) || node.anchor) {
+        hasReferences = true;
+        return visit.BREAK;
+      }
+    },
+  });
+  if (!hasReferences) return true;
+
+  function aliasTargets(reorder: boolean) {
+    const anchors = new Map<string, Node>();
+    const targets = new Map<Node, Node | undefined>();
+    function record(_key: unknown, node: Node) {
+      if (isAlias(node)) targets.set(node, anchors.get(node.source));
+      else if (node.anchor) anchors.set(node.anchor, node);
+      if (reorder && node === map) {
+        for (const index of order) {
+          const { key, value } = map.items[index];
+          if (isNode(key)) visit(key, { Node: record });
+          if (isNode(value)) visit(value, { Node: record });
+        }
+        return visit.SKIP;
+      }
+    }
+    visit(document.doc, { Node: record });
+    return targets;
+  }
+
+  const reordered = aliasTargets(true);
+  for (const [alias, target] of aliasTargets(false)) {
+    if (reordered.get(alias) !== target) return false;
+  }
+  return true;
+}
+
+/**
  * Builds the edits that reorder `map` so that its orderable keys follow
- * `expected`, keeping position-independent keys (`x-*`, `<<`) at the top
- * and schema-undefined keys in their original slots.
+ * `expected`, keeping pinned entries at the top and unknown entries in
+ * their original slots.
  *
- * Returns null for flow mappings or when reordering could change which
- * definition an alias binds to.
+ * Returns null when the mapping cannot be rewritten as whole lines, which is
+ * the case for flow mappings such as `web: {image: nginx, ports: []}`.
  */
 export function buildReorderEdits(
   document: ComposeDocument,
   map: YAMLMap,
   isPinned: (key: string) => boolean,
-  isIgnored: (key: string) => boolean,
+  isUnknown: (key: string) => boolean,
   expected: readonly string[],
   options: ReorderOptions = {},
 ): TextEdit[] | null {
@@ -71,17 +124,17 @@ export function buildReorderEdits(
   }
 
   const pinnedIndices: number[] = [];
-  const ignoredIndices = new Set<number>();
+  const unknownIndices = new Set<number>();
   const remaining = new Map<string, number[]>();
 
   map.items.forEach((pair, index) => {
     const key = document.pairKeyName(pair);
-    if (isIgnored(key)) {
-      ignoredIndices.add(index);
-      return;
-    }
     if (isPinned(key)) {
       pinnedIndices.push(index);
+      return;
+    }
+    if (isUnknown(key)) {
+      unknownIndices.add(index);
       return;
     }
     const bucket = remaining.get(key);
@@ -98,15 +151,12 @@ export function buildReorderEdits(
     orderedIndices.push(index);
   }
 
-  if (orderedIndices.length + ignoredIndices.size !== items.length) return null;
-  let orderedIndex = 0;
+  if (orderedIndices.length + unknownIndices.size !== items.length) return null;
+
+  let next = 0;
   const order = items.map((_, index) =>
-    ignoredIndices.has(index) ? index : orderedIndices[orderedIndex++],
+    unknownIndices.has(index) ? index : orderedIndices[next++],
   );
-  const edits = reorderEntries(document.source, items, order, options);
-  return edits?.some(({ start, end }) =>
-    document.hasRepeatedAnchorReference(start, end),
-  )
-    ? null
-    : edits;
+  if (!preservesAliasTargets(document, map, order)) return null;
+  return reorderEntries(document.source, items, order, options);
 }

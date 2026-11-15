@@ -25,11 +25,11 @@ the Node API may change in a minor release. Such changes are listed here.
   child declares its own list, and point inherited warnings at `extends`.
 - Report dynamically assigned host ports in both syntaxes, and describe
   `cap_add: [ALL]` separately from privileged mode.
-- Leave unknown service and top-level keys to schema validation while ordering
-  recognized keys around them.
+- `service-key-order` and `top-level-order` leave unknown keys to `spec-schema`.
+  Ordering fixes keep those keys and their comments in their original slots
+  and are offered only when YAML aliases keep the same targets.
 - Keep JSON and SARIF output parseable with `--fix`, and reject inherited
   property names in preset and rule option validation.
-- Decline ordering fixes that could rebind an alias to a duplicate YAML anchor.
 - Honor YAML-aliased merge tags and retain inherited port and capability lists
   when a same-file child leaves them null.
 - Recognize expanded IPv6 wildcard addresses and nested interpolation in

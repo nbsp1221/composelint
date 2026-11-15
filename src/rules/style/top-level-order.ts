@@ -2,16 +2,12 @@ import type { Rule, RuleContext } from "../../core/types.js";
 import { DEFAULT_TOP_LEVEL_ORDER, schemaTopLevelKeys } from "./key-order.js";
 import { buildReorderEdits, expectedOrder } from "./ordering.js";
 
-/**
- * Keys that are not ordered: `x-*` extension fields may appear anywhere, and
- * `version` is obsolete, so no-version-field asks for its removal instead of a position.
- */
 function isPinned(key: string): boolean {
   return key.startsWith("x-") || key === "version";
 }
 
-function isIgnored(key: string): boolean {
-  return !isPinned(key) && !schemaTopLevelKeys.has(key);
+function isUnknown(key: string): boolean {
+  return !schemaTopLevelKeys.has(key);
 }
 
 export const topLevelOrder: Rule = {
@@ -32,7 +28,7 @@ export const topLevelOrder: Rule = {
 
     const orderable = root.items.filter((pair) => {
       const key = context.document.pairKeyName(pair);
-      return !isPinned(key) && !isIgnored(key);
+      return !isPinned(key) && !isUnknown(key);
     });
     const keys = orderable.map((pair) => context.document.pairKeyName(pair));
     const expected = expectedOrder(keys, order);
@@ -50,7 +46,7 @@ export const topLevelOrder: Rule = {
             context.document,
             root,
             isPinned,
-            isIgnored,
+            isUnknown,
             expected,
           ),
       });
