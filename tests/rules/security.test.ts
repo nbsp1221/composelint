@@ -161,6 +161,24 @@ describe("image-require-tag image-require-tag", () => {
     expect(messages).toHaveLength(2);
   });
 
+  it("honors reset and inherited null pull policies", () => {
+    const source = `services:
+  base:
+    image: busybox:latest
+    build: .
+    pull_policy: build
+  reset:
+    extends: base
+    pull_policy: !reset build
+  inherited:
+    extends: base
+    pull_policy: null
+`;
+    const messages = messagesFor(source, "image-require-tag");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain('Service "reset"');
+  });
+
   it.each(["always", "missing", "never", `\${POLICY}`])(
     "reports an unpinned image with build and pull policy %s",
     (policy) => {

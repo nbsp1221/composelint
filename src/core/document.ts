@@ -38,6 +38,7 @@ const EXTENDED_SCALARS = [
   "image",
   "network_mode",
   "privileged",
+  "pull_policy",
 ] as const;
 const RESETTABLE_FIELDS = [
   ...EXTENDED_SEQUENCES,
