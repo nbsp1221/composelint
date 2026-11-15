@@ -128,31 +128,46 @@ describe("image-require-tag image-require-tag", () => {
     ).not.toContain("image-require-tag");
   });
 
-  // With `build`, `image` names the artifact Compose produces, so there is no
-  // registry reference to pin. Real projects use this to tag a local build
-  // (`image: sentry-self-hosted-local`), and reporting it was noise.
-  it("ignores an image that names a local build", () => {
-    for (const build of ["build: .", "build:\n      context: ."]) {
+  it.each(["build: .", "build:\n      context: ."])(
+    "reports an unpinned image with %s when pull policy is unspecified",
+    (build) => {
       expect(
-        ruleIds(`services:\n  web:\n    image: app-local\n    ${build}\n`),
-      ).not.toContain("image-require-tag");
-    }
+        ruleIds(`services:\n  web:\n    image: busybox:latest\n    ${build}\n`),
+      ).toContain("image-require-tag");
+    },
+  );
+
+  it("reports an unpinned image when build is inherited and pulling is allowed", () => {
+    const source = `x-built: &built\n  build: .\nservices:\n  web:\n    <<: *built\n    image: busybox:latest\n`;
+    expect(ruleIds(source)).toContain("image-require-tag");
   });
 
-  it("ignores a built image inherited through an anchor", () => {
-    const source = [
-      "name: qa",
-      "x-built: &built",
-      "  build: .",
-      "services:",
-      "  web:",
-      "    <<: *built",
-      "    image: app-local",
-      '    healthcheck: { test: ["CMD", "true"] }',
-      "",
-    ].join("\n");
+  it("does not report a local image label when pull_policy forces building", () => {
+    const source = `services:\n  web:\n    image: app-local\n    build: .\n    pull_policy: build\n`;
     expect(ruleIds(source)).not.toContain("image-require-tag");
   });
+
+  it("does not treat a reset or absent build as a local build output", () => {
+    const source = `services:
+  absent:
+    image: nginx:latest
+    pull_policy: build
+  reset:
+    image: nginx:latest
+    build: !reset .
+    pull_policy: build
+`;
+    const messages = messagesFor(source, "image-require-tag");
+    expect(messages).toHaveLength(2);
+  });
+
+  it.each(["always", "missing", "never", `\${POLICY}`])(
+    "reports an unpinned image with build and pull policy %s",
+    (policy) => {
+      const source = `services:\n  web:\n    image: busybox:latest\n    build: .\n    pull_policy: ${policy}\n`;
+      expect(ruleIds(source)).toContain("image-require-tag");
+    },
+  );
 });
 
 describe("no-unbound-ports published ports", () => {

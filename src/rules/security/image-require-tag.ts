@@ -21,11 +21,13 @@ export const imageRequireTag: Rule = {
       const image = document.getMergedServiceValue(name, "image");
       if (typeof image !== "string" || image === "") continue;
 
-      // With `build` present, Compose builds the image and applies `image` as
-      // the tag for the result. The reference is a label for a local artifact,
-      // not a dependency pulled from a registry, so pinning it says nothing
-      // about reproducibility — the Dockerfile decides that.
-      if (document.getMergedServiceKeys(name).includes("build")) continue;
+      // Compose may pull `image` even when `build` is present. Only an
+      // explicit build policy makes the image reference a local output label.
+      if (
+        document.getMergedServiceValue(name, "build") != null &&
+        document.getMergedServiceValue(name, "pull_policy") === "build"
+      )
+        continue;
 
       // Handle registry with port: registry.example.com:5000/app
       const lastSlash = image.lastIndexOf("/");
