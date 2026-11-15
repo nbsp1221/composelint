@@ -67,6 +67,28 @@ describe("service-key-order service-key-order", () => {
     ).not.toContain("service-key-order");
   });
 
+  it("preserves trailing service safety comments when fixing key order", () => {
+    const source = `services:
+  sandbox:
+    ports: ["127.0.0.1:8000:80"]
+    image: nginx:1
+    # Never expose the internal port publicly.
+  worker:
+    image: busybox:1
+`;
+    const fixed = fixSource(source).source;
+    expect(fixed.indexOf("image: nginx:1")).toBeLessThan(
+      fixed.indexOf('ports: ["127.0.0.1:8000:80"]'),
+    );
+    expect(
+      fixed.indexOf("# Never expose the internal port publicly."),
+    ).toBeGreaterThan(fixed.indexOf("  sandbox:"));
+    expect(
+      fixed.indexOf("# Never expose the internal port publicly."),
+    ).toBeLessThan(fixed.indexOf("  worker:"));
+    expect(fixSource(fixed).changed).toBe(false);
+  });
+
   it("reports when service keys are out of order", () => {
     expect(
       ruleIds(
