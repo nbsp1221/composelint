@@ -142,6 +142,21 @@ describe("image-require-tag image-require-tag", () => {
     expect(ruleIds(source)).toContain("image-require-tag");
   });
 
+  it("inherits a null build from a local extends service", () => {
+    const source = `services:
+  base:
+    image: example
+    build: .
+    pull_policy: build
+  child:
+    extends:
+      service: base
+    build: null
+`;
+    expect(messagesFor(source, "image-require-tag")).toEqual([]);
+    expect(messagesFor(source, "spec-schema")).toEqual([]);
+  });
+
   it("does not report a local image label when pull_policy forces building", () => {
     const source = `services:\n  web:\n    image: app-local\n    build: .\n    pull_policy: build\n`;
     expect(ruleIds(source)).not.toContain("image-require-tag");

@@ -35,6 +35,7 @@ interface ResolvedService {
 const EXTENDED_SEQUENCES = ["ports", "cap_add", "profiles"] as const;
 const EXTENDED_SCALARS = [
   "container_name",
+  "build",
   "image",
   "network_mode",
   "privileged",
@@ -43,7 +44,6 @@ const EXTENDED_SCALARS = [
 const RESETTABLE_FIELDS = [
   ...EXTENDED_SEQUENCES,
   ...EXTENDED_SCALARS,
-  "build",
   "healthcheck",
   "provider",
 ] as const;
