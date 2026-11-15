@@ -18,18 +18,15 @@ function orderingDiagnostics(source: string) {
 
 const source = `name: qa
 services:
-  # Worker service
   worker:
     image: busybox:1
     depends_on:
-      # Wait for cache
       cache: { condition: service_healthy, required: false }
       api: { condition: service_started } # API dependency
   cache:
     image: busybox:1
     depends_on:
       - app2 # Secondary app
-      # Primary app
       - app10
   app2: { image: busybox:1 }
   app10: { image: busybox:1 }
@@ -54,14 +51,14 @@ describe("alphabetical ordering", () => {
     },
   );
 
-  it("sorts service names and both dependency forms, moving comments and preserving dependency settings", () => {
+  it("sorts service names and both dependency forms, retaining inline comments and dependency settings", () => {
     const before = orderingDiagnostics(source);
     expect(before.map(({ ruleId, severity }) => [ruleId, severity])).toEqual([
       [services, "warn"],
       [dependencies, "error"],
       [dependencies, "error"],
     ]);
-    expect(before.map(({ range }) => range.start.line)).toEqual([4, 8, 13]);
+    expect(before.map(({ range }) => range.start.line)).toEqual([3, 6, 11]);
     expect(before.every(({ fix }) => Boolean(fix))).toBe(true);
 
     const first = lintAndFix(source, file, allRules, config);
@@ -74,21 +71,29 @@ services:
   cache:
     image: busybox:1
     depends_on:
-      # Primary app
       - app10
       - app2 # Secondary app
-  # Worker service
   worker:
     image: busybox:1
     depends_on:
       api: { condition: service_started } # API dependency
-      # Wait for cache
       cache: { condition: service_healthy, required: false }
 `);
     expect(orderingDiagnostics(first.source)).toEqual([]);
     expect(lintAndFix(first.source, file, allRules, config).changed).toBe(
       false,
     );
+  });
+
+  it.each([
+    `services:\n  # Production services\n  zebra: { image: nginx:1 }\n  alpha: { image: redis:7 }\n`,
+    `services:\n  app:\n    image: nginx:1\n    depends_on:\n      # Essential dependencies\n      - zebra\n      - alpha\n`,
+    `services:\n  app:\n    image: nginx:1\n    depends_on:\n      # Essential dependencies\n      zebra: { condition: service_started }\n      alpha: { condition: service_started }\n`,
+  ])("reports without moving an ambiguous standalone comment", (input) => {
+    const result = lintAndFix(input, file, allRules, config);
+    expect(result.source).toBe(input);
+    expect(orderingDiagnostics(input)).toHaveLength(1);
+    expect(orderingDiagnostics(input)[0].fix).toBeUndefined();
   });
 
   it("preserves CRLF and an unterminated last line in a short list", () => {

@@ -159,10 +159,20 @@ export function reportAlphabeticalOrder(
           newline: document.source.match(/\r?\n/)?.[0],
         },
       );
+      const indent =
+        ranges[0].keyStart -
+        (document.source.lastIndexOf("\n", ranges[0].keyStart - 1) + 1);
       return edits?.some(
         ({ start, end }) =>
           document.hasAnchorDependency(start, end) ||
-          hasNearbyDirective(document.source, start, end),
+          hasNearbyDirective(document.source, start, end) ||
+          document.source
+            .slice(start, end)
+            .split("\n")
+            .some(
+              (line) =>
+                line.trimStart().startsWith("#") && line.search(/\S/) <= indent,
+            ),
       )
         ? null
         : edits;

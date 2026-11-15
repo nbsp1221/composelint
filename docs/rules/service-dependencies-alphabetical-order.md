@@ -16,9 +16,9 @@ Enable it with `"rules": { "service-dependencies-alphabetical-order": "warn" }`.
 The rule skips reset, aliased or inherited dependency lists, and collections
 with YAML merge keys, nonliteral names, or repeated names. It reports
 out-of-order flow collections without a fix. Block edits retain dependency
-conditions and move adjacent comments with their entries. The rule withholds
-fixes around unsafe anchor bindings, suppression directives, multiline
-scalars, and explicit YAML keys. Short lists inside an anchored node are
+conditions and inline comments. The rule withholds fixes for ambiguous
+entry-level standalone comments, unsafe anchor bindings, suppression
+directives, multiline scalars, and explicit YAML keys. Short lists inside an anchored node are
 report-only because aliases can reuse the sequence in an order-sensitive field.
 
 ## Why it matters

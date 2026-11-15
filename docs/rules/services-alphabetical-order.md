@@ -16,9 +16,10 @@ case-sensitive and uses ascending ASCII order, so `App` precedes `app` and
 
 The rule skips reset collections, alias-only or inherited collections, and
 mappings with a YAML merge key or a nonliteral name. Flow mappings are
-reported without a fix. In block mappings, fixes move whole entries with
-their adjacent comments. Fixes are withheld when anchor bindings, suppression
-directives, multiline scalars, or explicit YAML keys make a move unsafe.
+reported without a fix. Block fixes retain inline and nested comments.
+Fixes are withheld when standalone comments at entry level have ambiguous
+attachment, or when anchor bindings, suppression directives, multiline scalars,
+or explicit YAML keys make a move unsafe.
 
 ## Why it matters
 
