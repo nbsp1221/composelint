@@ -6,6 +6,7 @@ import type { Rule } from "../../core/types.js";
 import { hasNearbyDirective, hasShallowComment } from "./alphabetical-order.js";
 import { localPortLists } from "./local-port-lists.js";
 
+const PORT_ORDER = new Intl.Collator("en", { numeric: true });
 const FIXED_PORT = /^[1-9][0-9]{0,4}$/;
 const SHORT_BINDING =
   /^(?:(?:[0-9.]+|\[[0-9A-Fa-f:.]+\]):)?[0-9]+:[0-9]+(?:\/[A-Za-z]+)?$/;
@@ -105,7 +106,7 @@ export const servicePortsAlphabeticalOrder: Rule = {
           isNode(item) &&
           previous !== undefined &&
           port !== undefined &&
-          previous.localeCompare(port, "en", { numeric: true }) > 0
+          PORT_ORDER.compare(previous, port) > 0
         ) {
           context.report({
             node: item,
