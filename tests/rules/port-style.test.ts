@@ -198,6 +198,33 @@ services:
     expect(lintAndFix(fixed, file, rules, config).changed).toBe(false);
   });
 
+  it("does not mistake ampersands or stars in ordinary text for YAML references", () => {
+    const source = `services:
+  app:
+    environment:
+      URL: "https://example.com/?a=1&b=*"
+    ports:
+      - "9000:90" # web & admin
+      - "8000:80"
+`;
+    const fixed = lintAndFix(source, file, rules, config).source;
+    expect(fixed.indexOf('"8000:80"')).toBeLessThan(fixed.indexOf('"9000:90"'));
+    expect(fixed).toContain('URL: "https://example.com/?a=1&b=*"');
+    expect(fixed).toContain('"9000:90" # web & admin');
+  });
+
+  it("does not reorder when the document contains YAML references", () => {
+    const source = `x-port: &saved "7000:70"
+services:
+  app:
+    ports:
+      - "9000:90"
+      - "8000:80"
+x-copy: *saved
+`;
+    expect(lintAndFix(source, file, rules, config).source).toBe(source);
+  });
+
   it("does not move suppression directives", () => {
     const source = `services:
   app:

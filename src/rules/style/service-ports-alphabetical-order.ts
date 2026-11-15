@@ -1,5 +1,13 @@
 import { isIP } from "node:net";
-import { type CST, isMap, isNode, isScalar, type YAMLSeq } from "yaml";
+import {
+  type CST,
+  isAlias,
+  isMap,
+  isNode,
+  isScalar,
+  visit,
+  type YAMLSeq,
+} from "yaml";
 import { parsePublishedPort } from "../../core/ports.js";
 import { reorderEntries } from "../../core/text-edit.js";
 import type { Rule } from "../../core/types.js";
@@ -130,6 +138,20 @@ export const servicePortsAlphabeticalOrder: Rule = {
     defaultSeverity: "off",
   },
   create(context) {
+    let hasReferences: boolean | undefined;
+    function containsReferences(): boolean {
+      if (hasReferences !== undefined) return hasReferences;
+      hasReferences = false;
+      visit(context.document.doc, {
+        Node: (_key, node) => {
+          if (isAlias(node) || node.anchor) {
+            hasReferences = true;
+            return visit.BREAK;
+          }
+        },
+      });
+      return hasReferences;
+    }
     for (const { service, list } of localPortLists(context.document, [
       "ports",
     ])) {
@@ -148,12 +170,7 @@ export const servicePortsAlphabeticalOrder: Rule = {
             fix: () => {
               // Reorder only a complete list of fixed literal bindings.
               // Anchor and alias references can make sequence order observable elsewhere.
-              if (
-                list.flow ||
-                list.anchor ||
-                /[&*]/.test(context.document.source)
-              )
-                return null;
+              if (list.flow || list.anchor || containsReferences()) return null;
               const values = list.items.map(fixedInterval);
               if (
                 !values.every(
