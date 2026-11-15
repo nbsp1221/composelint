@@ -62,11 +62,10 @@ describe("opt-in port style", () => {
   });
 
   it.each([
-    ['"9000-9001:90-91"', '"8000:80"'],
     ['"90"', '"80"'],
     [`"\${WEB_PORT:-9000}:80"`, `"\${API_PORT:-8000}:80"`],
   ])(
-    "reports out of order ranges, target-only ports and default variables",
+    "reports out of order target-only ports and default variables",
     (first, second) => {
       const source = `services:\n  app:\n    ports:\n      - ${first}\n      - ${second}\n`;
       expect(
@@ -88,6 +87,35 @@ describe("opt-in port style", () => {
     );
     expect(lintAndFix(fixed.source, file, rules, config).changed).toBe(false);
   });
+
+  it("fixes disjoint static short-form ranges without changing their mappings", () => {
+    const source = `services:
+  app:
+    ports:
+      - "9000-9001:90-91" # web
+      - "8000:80" # api
+`;
+    const expected = `services:
+  app:
+    ports:
+      - "8000:80" # api
+      - "9000-9001:90-91" # web
+`;
+    const result = lintAndFix(source, file, rules, config);
+    expect(result.source).toBe(expected);
+    expect(lintAndFix(result.source, file, rules, config).changed).toBe(false);
+  });
+
+  it.each([
+    ['"9000-9001:90-91"', '"9000:90"', '"8000:80"'],
+    ['"9000-9001:90"', '"8000:80"'],
+  ])(
+    "does not reorder overlapping or dynamically allocated ranges",
+    (...ports) => {
+      const source = `services:\n  app:\n    ports:\n${ports.map((port) => `      - ${port}\n`).join("")}`;
+      expect(lintAndFix(source, file, rules, config).source).toBe(source);
+    },
+  );
 
   it("does not reorder unresolved long bindings that can collapse to the same Compose port", () => {
     const source = `services:

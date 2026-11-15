@@ -51,6 +51,40 @@ function publishedNumber(node: unknown): number | undefined {
   return Number(port.published);
 }
 
+/** Only equal-length literal ranges are fixed; allocation ranges are dynamic. */
+function fixedInterval(
+  node: unknown,
+): { start: number; end: number; range: boolean } | undefined {
+  const single = publishedNumber(node);
+  if (single !== undefined) return { start: single, end: single, range: false };
+  if (!isScalar(node) || node.tag || typeof node.value !== "string") return;
+  const binding = parsePublishedPort(node.value);
+  if (
+    !binding ||
+    (binding.hostIp && !isIP(binding.hostIp)) ||
+    !["tcp", "udp", "sctp"].includes(binding.protocol)
+  )
+    return;
+  const host = /^([1-9][0-9]{0,4})-([1-9][0-9]{0,4})$/.exec(
+    binding.published ?? "",
+  );
+  const target = /^([1-9][0-9]{0,4})-([1-9][0-9]{0,4})$/.exec(binding.target);
+  if (!host || !target) return;
+  const start = Number(host[1]);
+  const end = Number(host[2]);
+  const targetStart = Number(target[1]);
+  const targetEnd = Number(target[2]);
+  if (
+    start > end ||
+    targetStart > targetEnd ||
+    end > 65535 ||
+    targetEnd > 65535 ||
+    end - start !== targetEnd - targetStart
+  )
+    return;
+  return { start, end, range: true };
+}
+
 /** Compare literal port ranges and interpolation expressions as written. */
 function sortKey(node: unknown): string | undefined {
   const number = publishedNumber(node);
@@ -120,8 +154,14 @@ export const servicePortsAlphabeticalOrder: Rule = {
                 /[&*]/.test(context.document.source)
               )
                 return null;
-              const values = list.items.map(publishedNumber);
-              if (values.some((value) => value === undefined)) return null;
+              const values = list.items.map(fixedInterval);
+              if (
+                !values.every(
+                  (value): value is NonNullable<typeof value> =>
+                    value !== undefined,
+                )
+              )
+                return null;
               const token = (list as YAMLSeq & { srcToken?: CST.Token })
                 .srcToken;
               if (token?.type !== "block-seq") return null;
@@ -151,10 +191,19 @@ export const servicePortsAlphabeticalOrder: Rule = {
                 )
               )
                 return null;
-              const order = values
-                .map((value, index) => ({ value: value as number, index }))
-                .sort((a, b) => a.value - b.value || a.index - b.index)
-                .map(({ index }) => index);
+              const sorted = values
+                .map((value, index) => ({ ...value, index }))
+                .sort((a, b) => a.start - b.start || a.index - b.index);
+              for (let index = 1; index < sorted.length; index++) {
+                const previous = sorted[index - 1];
+                const current = sorted[index];
+                if (
+                  current.start <= previous.end &&
+                  (previous.range || current.range)
+                )
+                  return null;
+              }
+              const order = sorted.map(({ index }) => index);
               const edits = reorderEntries(
                 context.document.source,
                 validRanges,

@@ -20,9 +20,10 @@ bindings break a run. The rule skips inherited lists and reset declarations.
 
 ## Why it matters
 
-Numeric ordering helps reviewers find a particular host port. Automatic fixes are limited to block lists of literal fixed short or long bindings
+Numeric ordering helps reviewers find a particular host port. Automatic fixes are limited to block lists of literal fixed short or long bindings and disjoint equal-length
+short-form ranges
 with their attached comments. Bindings with the same published port keep their
-relative order. Files with anchors or aliases, or lists with nearby suppression
+relative order. Overlapping ranges and dynamic allocation pools are not fixed. Files with anchors or aliases, or lists with nearby suppression
 directives are reported without a fix.
 
 ## Incorrect
