@@ -28,7 +28,7 @@ describe("opt-in port style", () => {
     expect(ids).not.toContain(quoting);
   });
 
-  it("compares numeric published ports across short and long forms and never reorders", () => {
+  it("compares numeric published ports across short and long forms", () => {
     const source = `services:
   app:
     ports:
@@ -42,10 +42,15 @@ describe("opt-in port style", () => {
         ruleId: ordering,
         message: expect.stringContaining("8000 should appear before 10000"),
         range: { start: { line: 7 } },
-        fix: undefined,
       },
     ]);
-    expect(lintAndFix(source, file, rules, config).source).toBe(source);
+    const fixed = lintAndFix(source, file, rules, config).source;
+    expect(fixed.indexOf('"127.0.0.1:8000:80"')).toBeLessThan(
+      fixed.indexOf("published: 10000"),
+    );
+    expect(fixed.indexOf("published: 10000")).toBeLessThan(
+      fixed.indexOf('published: "10000"'),
+    );
   });
 
   it("diagnoses simple variable port expressions without unsafe autofix", () => {
@@ -151,23 +156,28 @@ services:
     expect(lintAndFix(source, file, rules, config).source).toBe(expected);
   });
 
-  it("does not reorder ambiguous lists or move suppression directives", () => {
-    const duplicate = `services:
+  it("stably sorts fixed duplicates without changing their relative precedence", () => {
+    const source = `services:
   app:
     ports:
-      - "9000:90"
+      - {target: 80, published: "9000", name: web}
+      - {target: 80, published: "9000", name: api}
       - "8000:80"
-      - "8000:81"
 `;
-    const directive = `services:
+    const fixed = lintAndFix(source, file, rules, config).source;
+    expect(fixed.indexOf('"8000:80"')).toBeLessThan(fixed.indexOf("name: web"));
+    expect(fixed.indexOf("name: web")).toBeLessThan(fixed.indexOf("name: api"));
+    expect(lintAndFix(fixed, file, rules, config).changed).toBe(false);
+  });
+
+  it("does not move suppression directives", () => {
+    const source = `services:
   app:
     ports:
       - "9000:90" # composelint-disable-line another-rule
       - "8000:80"
 `;
-    for (const source of [duplicate, directive]) {
-      expect(lintAndFix(source, file, rules, config).source).toBe(source);
-    }
+    expect(lintAndFix(source, file, rules, config).source).toBe(source);
   });
 
   it.each([

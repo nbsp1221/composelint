@@ -111,7 +111,7 @@ export const servicePortsAlphabeticalOrder: Rule = {
             node: item,
             message: `Service "${service}": published port ${port} should appear before ${previous}`,
             fix: () => {
-              // Reorder only a complete list of distinct, fixed literal bindings.
+              // Reorder only a complete list of fixed literal bindings.
               // Anchor and alias references can make sequence order observable elsewhere.
               if (
                 list.flow ||
@@ -120,11 +120,7 @@ export const servicePortsAlphabeticalOrder: Rule = {
               )
                 return null;
               const values = list.items.map(publishedNumber);
-              if (
-                values.some((value) => value === undefined) ||
-                new Set(values).size !== values.length
-              )
-                return null;
+              if (values.some((value) => value === undefined)) return null;
               const token = (list as YAMLSeq & { srcToken?: CST.Token })
                 .srcToken;
               if (token?.type !== "block-seq") return null;
@@ -156,7 +152,7 @@ export const servicePortsAlphabeticalOrder: Rule = {
                 return null;
               const order = values
                 .map((value, index) => ({ value: value as number, index }))
-                .sort((a, b) => a.value - b.value)
+                .sort((a, b) => a.value - b.value || a.index - b.index)
                 .map(({ index }) => index);
               const edits = reorderEntries(
                 context.document.source,
