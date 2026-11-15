@@ -21,7 +21,8 @@ bindings break a run. The rule skips inherited lists and reset declarations.
 ## Why it matters
 
 Numeric ordering helps reviewers find a particular host port. Automatic fixes are limited to block lists of distinct literal short bindings
-without comments or anchors. Other supported cases are reported without a fix.
+with their attached comments. Files with anchors or aliases, or lists with nearby suppression
+directives are reported without a fix.
 
 ## Incorrect
 

@@ -3,6 +3,7 @@ import { type CST, isMap, isNode, isScalar, type YAMLSeq } from "yaml";
 import { parsePublishedPort } from "../../core/ports.js";
 import { reorderEntries } from "../../core/text-edit.js";
 import type { Rule } from "../../core/types.js";
+import { hasNearbyDirective, hasShallowComment } from "./alphabetical-order.js";
 import { localPortLists } from "./local-port-lists.js";
 
 const FIXED_PORT = /^[1-9][0-9]{0,4}$/;
@@ -95,11 +96,11 @@ export const servicePortsAlphabeticalOrder: Rule = {
             message: `Service "${service}": published port ${port} should appear before ${previous}`,
             fix: () => {
               // Reorder only a complete list of distinct, literal short bindings.
-              // Comments, anchors and directives need a richer preservation model.
+              // Anchor and alias references can make sequence order observable elsewhere.
               if (
                 list.flow ||
                 list.anchor ||
-                /[#&*]/.test(context.document.source)
+                /[&*]/.test(context.document.source)
               )
                 return null;
               const values = list.items.map(publishedNumber);
@@ -122,18 +123,34 @@ export const servicePortsAlphabeticalOrder: Rule = {
                   : null;
               });
               if (ranges.some((range) => range === null)) return null;
+              const validRanges = ranges as {
+                keyStart: number;
+                valueEnd: number;
+              }[];
+              if (
+                validRanges.some((range) =>
+                  hasShallowComment(context.document.source, range),
+                )
+              )
+                return null;
               const order = values
                 .map((value, index) => ({ value: value as number, index }))
                 .sort((a, b) => a.value - b.value)
                 .map(({ index }) => index);
-              return reorderEntries(
+              const edits = reorderEntries(
                 context.document.source,
-                ranges as { keyStart: number; valueEnd: number }[],
+                validRanges,
                 order,
                 {
+                  includeLeadingComments: true,
                   newline: context.document.source.match(/\r?\n/)?.[0],
                 },
               );
+              return edits?.some(({ start, end }) =>
+                hasNearbyDirective(context.document.source, start, end),
+              )
+                ? null
+                : edits;
             },
           });
           break;

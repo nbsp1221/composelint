@@ -84,9 +84,43 @@ describe("opt-in port style", () => {
     expect(lintAndFix(fixed.source, file, rules, config).changed).toBe(false);
   });
 
-  it("does not move comments or ambiguous lists", () => {
-    for (const suffix of [" # comment", ""]) {
-      const source = `services:\n  app:\n    ports:\n      - "9000:90"${suffix}\n      - "8000:80"\n      - "8000:81"\n`;
+  it("moves comments with their bindings, retaining unrelated comments", () => {
+    const source = `# project header
+services:
+  app:
+    ports:
+      # web
+      - "9000:90" # web inline
+      # api
+      - "8000:80" # api inline
+`;
+    const expected = `# project header
+services:
+  app:
+    ports:
+      # api
+      - "8000:80" # api inline
+      # web
+      - "9000:90" # web inline
+`;
+    expect(lintAndFix(source, file, rules, config).source).toBe(expected);
+  });
+
+  it("does not reorder ambiguous lists or move suppression directives", () => {
+    const duplicate = `services:
+  app:
+    ports:
+      - "9000:90"
+      - "8000:80"
+      - "8000:81"
+`;
+    const directive = `services:
+  app:
+    ports:
+      - "9000:90" # composelint-disable-line another-rule
+      - "8000:80"
+`;
+    for (const source of [duplicate, directive]) {
       expect(lintAndFix(source, file, rules, config).source).toBe(source);
     }
   });

@@ -84,7 +84,7 @@ function canMoveCollection(collection: YAMLMap | YAMLSeq): boolean {
   return !multilineScalar;
 }
 
-function hasNearbyDirective(
+export function hasNearbyDirective(
   source: string,
   start: number,
   end: number,
@@ -105,7 +105,7 @@ function hasNearbyDirective(
   return false;
 }
 
-function hasShallowComment(source: string, range: ItemRange): boolean {
+export function hasShallowComment(source: string, range: ItemRange): boolean {
   const lineStart = source.lastIndexOf("\n", range.keyStart - 1) + 1;
   const indent = range.keyStart - lineStart;
   return source
