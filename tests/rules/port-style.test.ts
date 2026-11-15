@@ -84,6 +84,22 @@ describe("opt-in port style", () => {
     expect(lintAndFix(fixed.source, file, rules, config).changed).toBe(false);
   });
 
+  it("does not reorder unresolved long bindings that can collapse to the same Compose port", () => {
+    const source = `services:
+  app:
+    ports:
+      - target: 80
+        published: "\${Z_PORT}"
+        name: web
+      - target: 80
+        published: "\${A_PORT}"
+        name: api
+`;
+    // When the two variables resolve to the same port, Compose keeps the
+    // later entry's name; changing order would change the effective model.
+    expect(lintAndFix(source, file, rules, config).source).toBe(source);
+  });
+
   it("fixes distinct fixed ports in mixed short and long form", () => {
     const source = `services:
   app:
