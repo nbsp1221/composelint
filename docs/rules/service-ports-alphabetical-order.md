@@ -5,6 +5,8 @@
 | `recommended` | off |
 | `strict` | off |
 
+🔧 Fixable with `--fix`.
+
 ## What it does
 
 Checks ascending numeric order by published host port within each run of
@@ -12,15 +14,15 @@ adjacent, fixed single-port bindings in a locally declared `ports` list.
 Short and long forms can appear in the same run. Bindings with the same
 published number can appear in either order.
 
-Ranges, dynamic or target-only ports, interpolation, aliases, and entries
-without a supported literal binding break a run. The rule skips inherited
-lists and reset declarations.
+Simple `${NAME}:target` expressions are compared as written, rather than by
+their unknown runtime value. Ranges, dynamic or target-only ports, complex
+interpolation, aliases, and unsupported bindings break a run. The rule skips
+inherited lists and reset declarations.
 
 ## Why it matters
 
-Numeric ordering helps reviewers find a particular host port. The rule is
-report-only because Compose retains the sequence order and entries such as
-published ranges can interact with other bindings.
+Numeric ordering helps reviewers find a particular host port. Automatic fixes are limited to block lists of distinct literal short bindings
+without comments or anchors. Other supported cases are reported without a fix.
 
 ## Incorrect
 

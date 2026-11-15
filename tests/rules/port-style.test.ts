@@ -48,6 +48,34 @@ describe("opt-in port style", () => {
     expect(lintAndFix(source, file, rules, config).source).toBe(source);
   });
 
+  it("diagnoses simple variable port expressions without unsafe autofix", () => {
+    const source = `services:\n  app:\n    ports:\n      - "\${WEB_PORT}:80"\n      - "\${API_PORT}:80"\n`;
+    expect(
+      lint(source).filter(({ ruleId }) => ruleId === ordering),
+    ).toHaveLength(1);
+    expect(lintAndFix(source, file, rules, config).source).toBe(source);
+  });
+
+  it("fixes a simple block list of distinct literal ports, preserving line endings", () => {
+    const source =
+      'services:\r\n  app:\r\n    ports:\r\n      - "9000:90"\r\n      - "8000:80"\r\n';
+    const fixed = lintAndFix(source, file, rules, config);
+    expect(fixed.source).toBe(
+      source.replace(
+        '"9000:90"\r\n      - "8000:80"',
+        '"8000:80"\r\n      - "9000:90"',
+      ),
+    );
+    expect(lintAndFix(fixed.source, file, rules, config).changed).toBe(false);
+  });
+
+  it("does not move comments or ambiguous lists", () => {
+    for (const suffix of [" # comment", ""]) {
+      const source = `services:\n  app:\n    ports:\n      - "9000:90"${suffix}\n      - "8000:80"\n      - "8000:81"\n`;
+      expect(lintAndFix(source, file, rules, config).source).toBe(source);
+    }
+  });
+
   it.each([
     "80",
     '"0:80"',
