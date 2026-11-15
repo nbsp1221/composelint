@@ -14,8 +14,8 @@ adjacent, fixed single-port bindings in a locally declared `ports` list.
 Short and long forms can appear in the same run. Bindings with the same
 published number can appear in either order.
 
-Short-form ranges, target-only ports and variable expressions are compared as
-written, rather than by their unknown runtime values. Aliases and unsupported
+Short-form ranges and target-only ports, plus short- or long-form published
+variable expressions, are compared as written rather than by their runtime values. Aliases and unsupported
 bindings break a run. The rule skips inherited lists and reset declarations.
 
 ## Why it matters

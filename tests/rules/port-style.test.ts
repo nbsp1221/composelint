@@ -97,6 +97,9 @@ describe("opt-in port style", () => {
 `;
     // When the two variables resolve to the same port, Compose keeps the
     // later entry's name; changing order would change the effective model.
+    expect(
+      lint(source).filter(({ ruleId }) => ruleId === ordering),
+    ).toHaveLength(1);
     expect(lintAndFix(source, file, rules, config).source).toBe(source);
   });
 

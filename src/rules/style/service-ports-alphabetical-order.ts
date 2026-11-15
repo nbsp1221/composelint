@@ -54,6 +54,22 @@ function publishedNumber(node: unknown): number | undefined {
 function sortKey(node: unknown): string | undefined {
   const number = publishedNumber(node);
   if (number !== undefined) return String(number);
+  if (isMap(node) && !node.tag) {
+    const published = node.get("published", true);
+    const target = node.get("target", true);
+    if (
+      !isScalar(published) ||
+      published.tag ||
+      typeof published.value !== "string" ||
+      !isScalar(target) ||
+      target.tag ||
+      !["string", "number"].includes(typeof target.value)
+    )
+      return;
+    return /^(?:\$\{.+\}|\$[A-Za-z_][A-Za-z0-9_]*)$/.test(published.value)
+      ? published.value
+      : undefined;
+  }
   if (
     !isScalar(node) ||
     node.tag ||
