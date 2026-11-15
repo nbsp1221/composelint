@@ -49,21 +49,31 @@ function publishedNumber(node: unknown): number | undefined {
   return Number(port.published);
 }
 
-/** A simple interpolated published port can be compared as written. */
+/** Compare literal port ranges and interpolation expressions as written. */
 function sortKey(node: unknown): string | undefined {
   const number = publishedNumber(node);
   if (number !== undefined) return String(number);
-  if (!isScalar(node) || node.tag || typeof node.value !== "string") return;
-  return /^(\$\{[A-Za-z_][A-Za-z0-9_]*\}):[1-9][0-9]{0,4}(?:\/(?:tcp|udp|sctp))?$/.exec(
-    node.value,
-  )?.[1];
+  if (
+    !isScalar(node) ||
+    node.tag ||
+    !["string", "number"].includes(typeof node.value)
+  )
+    return;
+  const binding = parsePublishedPort(node.value);
+  if (!binding || !["tcp", "udp", "sctp"].includes(binding.protocol)) return;
+  if ((binding.hostIp && !isIP(binding.hostIp)) || binding.published === "0")
+    return;
+  const value = binding.published ?? binding.target;
+  // Unknown variable values are compared as expressions, never substituted.
+  if (/^(?:[0-9]+(?:-[0-9]+)?|\$\{.+\}|\$[A-Za-z_][A-Za-z0-9_]*)$/.test(value))
+    return value;
 }
 
 export const servicePortsAlphabeticalOrder: Rule = {
   meta: {
     name: "service-ports-alphabetical-order",
     category: "style",
-    description: "Fixed published ports should be in ascending numeric order",
+    description: "Ports should be ordered by their written published value",
     fixable: true,
     defaultSeverity: "off",
   },

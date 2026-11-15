@@ -56,6 +56,21 @@ describe("opt-in port style", () => {
     expect(lintAndFix(source, file, rules, config).source).toBe(source);
   });
 
+  it.each([
+    ['"9000-9001:90-91"', '"8000:80"'],
+    ['"90"', '"80"'],
+    [`"\${WEB_PORT:-9000}:80"`, `"\${API_PORT:-8000}:80"`],
+  ])(
+    "reports out of order ranges, target-only ports and default variables",
+    (first, second) => {
+      const source = `services:\n  app:\n    ports:\n      - ${first}\n      - ${second}\n`;
+      expect(
+        lint(source).filter(({ ruleId }) => ruleId === ordering),
+      ).toHaveLength(1);
+      expect(lintAndFix(source, file, rules, config).source).toBe(source);
+    },
+  );
+
   it("fixes a simple block list of distinct literal ports, preserving line endings", () => {
     const source =
       'services:\r\n  app:\r\n    ports:\r\n      - "9000:90"\r\n      - "8000:80"\r\n';
@@ -77,12 +92,9 @@ describe("opt-in port style", () => {
   });
 
   it.each([
-    "80",
     '"0:80"',
-    '"7000-7001:80-81"',
     '{target: 80, published: "7000-7001"}',
     '{target: 80, published: "70000"}',
-    `"\${PUBLISHED:-7000}:80"`,
     '"7000::80"',
     "*port",
   ])("treats %s as a boundary between fixed bindings", (boundary) => {
@@ -121,7 +133,9 @@ services:
     expect(fixed.document.getTagAtPath(["services", "app", "ports"])).toBe(
       "!override",
     );
-    expect(lint(fixed.source)).toMatchObject([
+    expect(
+      lint(fixed.source).filter(({ ruleId }) => ruleId === quoting),
+    ).toMatchObject([
       {
         ruleId: quoting,
         message: expect.stringContaining('"84"'),

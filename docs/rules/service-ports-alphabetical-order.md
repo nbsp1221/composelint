@@ -14,10 +14,9 @@ adjacent, fixed single-port bindings in a locally declared `ports` list.
 Short and long forms can appear in the same run. Bindings with the same
 published number can appear in either order.
 
-Simple `${NAME}:target` expressions are compared as written, rather than by
-their unknown runtime value. Ranges, dynamic or target-only ports, complex
-interpolation, aliases, and unsupported bindings break a run. The rule skips
-inherited lists and reset declarations.
+Short-form ranges, target-only ports and variable expressions are compared as
+written, rather than by their unknown runtime values. Aliases and unsupported
+bindings break a run. The rule skips inherited lists and reset declarations.
 
 ## Why it matters
 
