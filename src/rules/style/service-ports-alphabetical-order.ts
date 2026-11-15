@@ -95,7 +95,7 @@ export const servicePortsAlphabeticalOrder: Rule = {
             node: item,
             message: `Service "${service}": published port ${port} should appear before ${previous}`,
             fix: () => {
-              // Reorder only a complete list of distinct, literal short bindings.
+              // Reorder only a complete list of distinct, fixed literal bindings.
               // Anchor and alias references can make sequence order observable elsewhere.
               if (
                 list.flow ||
@@ -113,7 +113,12 @@ export const servicePortsAlphabeticalOrder: Rule = {
                 .srcToken;
               if (token?.type !== "block-seq") return null;
               const ranges = list.items.map((node, index) => {
-                if (!isScalar(node) || node.tag || node.anchor || !node.range)
+                if (
+                  (!isScalar(node) && !isMap(node)) ||
+                  node.tag ||
+                  node.anchor ||
+                  !node.range
+                )
                   return null;
                 const dash = token.items[index]?.start.find(
                   ({ type }) => type === "seq-item-ind",

@@ -84,6 +84,32 @@ describe("opt-in port style", () => {
     expect(lintAndFix(fixed.source, file, rules, config).changed).toBe(false);
   });
 
+  it("fixes distinct fixed ports in mixed short and long form", () => {
+    const source = `services:
+  app:
+    ports:
+      # web
+      - target: 90
+        published: "9000"
+        protocol: tcp
+      # api
+      - "8000:80"
+`;
+    const expected = `services:
+  app:
+    ports:
+      # api
+      - "8000:80"
+      # web
+      - target: 90
+        published: "9000"
+        protocol: tcp
+`;
+    const fixed = lintAndFix(source, file, rules, config);
+    expect(fixed.source).toBe(expected);
+    expect(lintAndFix(fixed.source, file, rules, config).changed).toBe(false);
+  });
+
   it("moves comments with their bindings, retaining unrelated comments", () => {
     const source = `# project header
 services:
