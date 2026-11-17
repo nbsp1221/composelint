@@ -111,6 +111,15 @@ describe("image-require-tag image-require-tag", () => {
     },
   );
 
+  it("does not treat a slash inside an image variable as a registry separator", () => {
+    expect(ruleIds(imageFixture(`\${IMAGE:-registry/app}`))).not.toContain(
+      "image-require-tag",
+    );
+    expect(
+      ruleIds(imageFixture(`\${REGISTRY:-example/org}/app:latest`)),
+    ).toContain("image-require-tag");
+  });
+
   it("reports image without tag", () => {
     expect(ruleIds("services:\n  web:\n    image: nginx\n")).toContain(
       "image-require-tag",

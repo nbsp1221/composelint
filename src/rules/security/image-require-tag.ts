@@ -31,6 +31,9 @@ export const imageRequireTag: Rule = {
 
       // Handle registry with port: registry.example.com:5000/app
       const lastSlash = image.lastIndexOf("/");
+      const interpolation = image.lastIndexOf("${", lastSlash);
+      if (interpolation !== -1 && image.indexOf("}", interpolation) > lastSlash)
+        continue;
       const namePart = lastSlash === -1 ? image : image.slice(lastSlash + 1);
 
       // The image name may be supplied by either $IMAGE or ${IMAGE}.
