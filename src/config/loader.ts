@@ -167,7 +167,7 @@ export function resolveConfig(
 
   const requestedPreset = cliPreset ?? config.preset ?? DEFAULT_PRESET;
   let presetName: PresetName = DEFAULT_PRESET;
-  if (requestedPreset in presets) {
+  if (Object.hasOwn(presets, requestedPreset)) {
     presetName = requestedPreset as PresetName;
   } else {
     warnings.push(
@@ -346,8 +346,7 @@ function validateOptions(
   const accepted: Record<string, unknown> = {};
 
   for (const [option, value] of Object.entries(options)) {
-    const type = declared[option];
-    if (!type) {
+    if (!Object.hasOwn(declared, option)) {
       const known = Object.keys(declared);
       const suffix =
         known.length > 0
@@ -359,6 +358,7 @@ function validateOptions(
       continue;
     }
 
+    const type = declared[option];
     if (type === "string[]" && !isStringArray(value)) {
       warnings.push(
         `Rule "${ruleName}": option "${option}" must be an array of strings — ignored.`,

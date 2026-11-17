@@ -80,7 +80,7 @@ Replaces the set of tags treated as moving. Comparison is case-insensitive.
 
 - A version-like tag that is actually mutable (`nginx:1`, `nginx:stable-alpine`) is not reported unless you list it in `forbiddenTags`.
 - The rule does not require a digest; a tag is enough to satisfy it.
-- **A service that also declares `build` is skipped.** Compose then builds the image and applies `image` as the tag for the result, so the reference names a local artifact rather than a dependency pulled from a registry — `image: myapp-local` next to `build: .` is the documented way to name a build. Reproducibility for such a service comes from the Dockerfile, not from the tag.
+- A service with both `build` and `image` is still checked: Compose may pull the image before building. Only an explicit `pull_policy: build` with a build definition is skipped because the image reference then names the local build output. CLI flags can override the configured policy; this static check cannot see those flags. See the [Compose Build Specification](https://docs.docker.com/reference/compose-file/build/#using-build-and-image).
 - A service with no `image` at all is not reported here.
 
 ## Related

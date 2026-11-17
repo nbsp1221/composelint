@@ -17,13 +17,18 @@ export const noCapAddAll: Rule = {
       if (!Array.isArray(capabilities)) continue;
 
       capabilities.forEach((capability, index) => {
-        if (String(capability).toUpperCase() !== "ALL") return;
+        if (
+          typeof capability !== "string" ||
+          capability.toUpperCase() !== "ALL"
+        ) {
+          return;
+        }
 
         reportServiceValue(
           context,
           name,
           ["cap_add", index],
-          `Service "${name}": cap_add includes ALL, which is equivalent to privileged mode`,
+          `Service "${name}": cap_add includes ALL Linux capabilities`,
         );
       });
     }

@@ -46,6 +46,9 @@ export function formatSarif(results: LintResult[], rules: Rule[]): string {
                 shortDescription: { text: r.meta.description },
                 helpUri: ruleDocsUrl(r.meta.name),
                 defaultConfiguration: {
+                  ...(r.meta.defaultSeverity === "off"
+                    ? { enabled: false }
+                    : {}),
                   level:
                     r.meta.defaultSeverity === "error" ? "error" : "warning",
                 },

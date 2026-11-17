@@ -21,18 +21,30 @@ export const imageRequireTag: Rule = {
       const image = document.getMergedServiceValue(name, "image");
       if (typeof image !== "string" || image === "") continue;
 
-      // With `build` present, Compose builds the image and applies `image` as
-      // the tag for the result. The reference is a label for a local artifact,
-      // not a dependency pulled from a registry, so pinning it says nothing
-      // about reproducibility — the Dockerfile decides that.
-      if (document.getMergedServiceKeys(name).includes("build")) continue;
+      // Compose may pull `image` even when `build` is present. Only an
+      // explicit build policy makes the image reference a local output label.
+      if (
+        document.getMergedServiceValue(name, "build") != null &&
+        document.getMergedServiceValue(name, "pull_policy") === "build"
+      )
+        continue;
 
       // Handle registry with port: registry.example.com:5000/app
       const lastSlash = image.lastIndexOf("/");
+      let interpolationDepth = 0;
+      for (let i = 0; i < lastSlash; i++) {
+        if (image[i] === "$" && image[i + 1] === "{") {
+          interpolationDepth++;
+          i++;
+        } else if (image[i] === "}" && interpolationDepth > 0) {
+          interpolationDepth--;
+        }
+      }
+      if (interpolationDepth > 0) continue;
       const namePart = lastSlash === -1 ? image : image.slice(lastSlash + 1);
 
-      // `image: ${IMAGE}` may already carry a tag; Compose resolves it later.
-      if (namePart.includes("${")) continue;
+      // The image name may be supplied by either $IMAGE or ${IMAGE}.
+      if (/\$(?:\{|[A-Za-z_])/.test(namePart)) continue;
 
       const colonIndex = namePart.lastIndexOf(":");
 

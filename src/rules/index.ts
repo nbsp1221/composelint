@@ -1,4 +1,6 @@
 import type { Rule } from "../core/types.js";
+import { noConflictingPublishedPorts } from "./best-practice/no-conflicting-published-ports.js";
+import { noDuplicateContainerNames } from "./best-practice/no-duplicate-container-names.js";
 import { requireHealthcheck } from "./best-practice/require-healthcheck.js";
 import { requireName } from "./best-practice/require-name.js";
 import { imageRequireTag } from "./security/image-require-tag.js";
@@ -8,7 +10,11 @@ import { noPrivileged } from "./security/no-privileged.js";
 import { noUnboundPorts } from "./security/no-unbound-ports.js";
 import { specSchema } from "./spec/spec-schema.js";
 import { noVersionField } from "./style/no-version-field.js";
+import { requireQuotesInPorts } from "./style/require-quotes-in-ports.js";
+import { serviceDependenciesAlphabeticalOrder } from "./style/service-dependencies-alphabetical-order.js";
 import { serviceKeyOrder } from "./style/service-key-order.js";
+import { servicePortsAlphabeticalOrder } from "./style/service-ports-alphabetical-order.js";
+import { servicesAlphabeticalOrder } from "./style/services-alphabetical-order.js";
 import { topLevelOrder } from "./style/top-level-order.js";
 
 export const allRules: Rule[] = [
@@ -17,6 +23,10 @@ export const allRules: Rule[] = [
   // Style
   topLevelOrder,
   serviceKeyOrder,
+  servicesAlphabeticalOrder,
+  serviceDependenciesAlphabeticalOrder,
+  servicePortsAlphabeticalOrder,
+  requireQuotesInPorts,
   noVersionField,
   // Security
   noPrivileged,
@@ -25,6 +35,8 @@ export const allRules: Rule[] = [
   noUnboundPorts,
   imageRequireTag,
   // Best Practice
+  noDuplicateContainerNames,
+  noConflictingPublishedPorts,
   requireName,
   requireHealthcheck,
 ];
@@ -32,13 +44,19 @@ export const allRules: Rule[] = [
 export {
   imageRequireTag,
   noCapAddAll,
+  noConflictingPublishedPorts,
+  noDuplicateContainerNames,
   noHostNetwork,
   noPrivileged,
   noUnboundPorts,
   noVersionField,
   requireHealthcheck,
   requireName,
+  requireQuotesInPorts,
+  serviceDependenciesAlphabeticalOrder,
   serviceKeyOrder,
+  servicePortsAlphabeticalOrder,
+  servicesAlphabeticalOrder,
   specSchema,
   topLevelOrder,
 };

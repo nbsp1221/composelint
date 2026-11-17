@@ -1,16 +1,17 @@
-import { relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import picomatch from "picomatch";
 
 export interface PathMatcher {
   /** Returns true when the given file path matches the patterns. */
   (filePath: string): boolean;
-  /** The patterns this matcher was built from, in evaluation order. */
-  patterns: string[];
+  /** Whether the walker can skip this directory and all its contents. */
+  canPruneDirectory(directory: string): boolean;
 }
 
 interface CompiledPattern {
   negated: boolean;
   isMatch: (path: string) => boolean;
+  prefix: string;
 }
 
 function compile(pattern: string): CompiledPattern | null {
@@ -23,14 +24,18 @@ function compile(pattern: string): CompiledPattern | null {
   const normalized = body.replace(/\/+$/, "");
   const isMatch = picomatch([normalized, `${normalized}/**`], { dot: true });
 
-  return { negated, isMatch };
+  // Escapes and alternation can make the scan report an unsafe prefix.
+  const prefix =
+    negated && !/[\\|!]/.test(normalized)
+      ? picomatch.scan(normalized).base
+      : "";
+  return { negated, isMatch, prefix };
 }
 
 /**
  * Builds a glob matcher with ESLint-like semantics:
  *
- * - Patterns are resolved relative to `baseDir` (the directory of the
- *   configuration file, or the current working directory when there is none).
+ * - Appended patterns run last and may have a different base directory.
  * - `dist` and `dist/` both match the whole directory.
  * - Patterns starting with `!` un-match previously matched paths.
  * - Later patterns win, so order matters.
@@ -39,30 +44,55 @@ function compile(pattern: string): CompiledPattern | null {
 export function createPathMatcher(
   patterns: string[],
   baseDir: string,
+  appended?: { patterns: string[]; baseDir: string },
 ): PathMatcher {
-  const compiled = patterns
-    .map(compile)
-    .filter((entry): entry is CompiledPattern => entry !== null);
+  const groups = (
+    appended ? [{ patterns, baseDir }, appended] : [{ patterns, baseDir }]
+  ).map(({ patterns, baseDir }) => ({
+    baseDir,
+    compiled: patterns
+      .map(compile)
+      .filter((entry): entry is CompiledPattern => entry !== null),
+  }));
+  const reincludePrefixes = groups.flatMap(({ baseDir, compiled }) =>
+    compiled
+      .filter(({ negated }) => negated)
+      .map(({ prefix }) => resolve(baseDir, prefix)),
+  );
 
   const matcher = (filePath: string): boolean => {
-    const relativePath = toRelativePosix(filePath, baseDir);
-    if (relativePath === null) return false;
-
+    const absolute = resolve(filePath);
     let matched = false;
-    for (const { negated, isMatch } of compiled) {
-      if (isMatch(relativePath)) matched = !negated;
+    for (const { baseDir, compiled } of groups) {
+      const relativePath = toRelativePosix(absolute, baseDir);
+      if (!relativePath) continue;
+      for (const { negated, isMatch } of compiled) {
+        if (isMatch(relativePath)) matched = !negated;
+      }
     }
     return matched;
   };
 
-  matcher.patterns = patterns;
+  matcher.canPruneDirectory = (directory: string): boolean =>
+    matcher(directory) &&
+    !reincludePrefixes.some(
+      (prefix) =>
+        toRelativePosix(prefix, directory) !== null ||
+        toRelativePosix(directory, prefix) !== null,
+    );
   return matcher;
 }
 
 function toRelativePosix(filePath: string, baseDir: string): string | null {
   // File paths come from the command line or the file walker, so they are
   // relative to the current working directory, not to the config directory.
-  const relativePath = relative(resolve(baseDir), resolve(filePath));
-  if (relativePath === "" || relativePath.startsWith("..")) return null;
+  const relativePath = relative(baseDir, filePath);
+  if (
+    isAbsolute(relativePath) ||
+    relativePath === ".." ||
+    relativePath.startsWith(`..${sep}`)
+  ) {
+    return null;
+  }
   return relativePath.split(sep).join("/");
 }

@@ -5,11 +5,11 @@ import { allRules } from "../rules/index.js";
  * Presets follow the convention shared by ESLint, typescript-eslint and Biome:
  * one default set plus one opt-in escalation.
  *
- * - `recommended` (default): every rule is enabled at the severity declared by
- *   the rule itself (`meta.defaultSeverity`). Problems that Compose itself
+ * - `recommended` (default): uses each rule's declared default severity.
+ *   Problems that Compose itself
  *   rejects or that are unambiguously obsolete are errors; opinionated checks
  *   are warnings so they do not break a pipeline on their own.
- * - `strict`: the same rules, all raised to `error`.
+ * - `strict`: raises enabled rules to `error`. Opt-in rules stay off.
  *
  * There is deliberately no "minimal" or "none" preset. Loosening is done per
  * rule via `rules: { "<rule>": "off" }`, which is how ESLint, Biome and dclint
@@ -26,10 +26,13 @@ function buildRecommended(): PresetMap {
   );
 }
 
-/** Every rule at `error`. */
+/** Raise every enabled rule to `error`. */
 function buildStrict(): PresetMap {
   return Object.fromEntries(
-    allRules.map((rule) => [rule.meta.name, "error" as Severity]),
+    allRules.map(({ meta }) => [
+      meta.name,
+      meta.defaultSeverity === "off" ? "off" : "error",
+    ]),
   );
 }
 

@@ -67,6 +67,28 @@ describe("service-key-order service-key-order", () => {
     ).not.toContain("service-key-order");
   });
 
+  it("preserves trailing service safety comments when fixing key order", () => {
+    const source = `services:
+  sandbox:
+    ports: ["127.0.0.1:8000:80"]
+    image: nginx:1
+    # Never expose the internal port publicly.
+  worker:
+    image: busybox:1
+`;
+    const fixed = fixSource(source).source;
+    expect(fixed.indexOf("image: nginx:1")).toBeLessThan(
+      fixed.indexOf('ports: ["127.0.0.1:8000:80"]'),
+    );
+    expect(
+      fixed.indexOf("# Never expose the internal port publicly."),
+    ).toBeGreaterThan(fixed.indexOf("  sandbox:"));
+    expect(
+      fixed.indexOf("# Never expose the internal port publicly."),
+    ).toBeLessThan(fixed.indexOf("  worker:"));
+    expect(fixSource(fixed).changed).toBe(false);
+  });
+
   it("reports when service keys are out of order", () => {
     expect(
       ruleIds(
@@ -100,6 +122,41 @@ describe("no-version-field no-version-field", () => {
     );
     expect(fixed).not.toContain("version");
     expect(fixed).toContain("services:");
+  });
+});
+
+describe("unknown keys in ordering rules", () => {
+  it("leaves a misspelled service key to spec-schema", () => {
+    const source =
+      "services:\n  app:\n    image: nginx:1\n    restartt: always\n    ports: [80]\n";
+    expect(messagesFor(source, "spec-schema")).toHaveLength(1);
+    expect(messagesFor(source, "service-key-order")).toEqual([]);
+    expect(fixSource(source).changed).toBe(false);
+  });
+
+  it("orders known keys around an unknown key and preserves its comment", () => {
+    const source =
+      "services:\n  app:\n    ports: [80]\n    # typo\n    restartt: always\n    image: nginx:1\n";
+    const config = resolveConfig({
+      rules: {
+        "service-key-order": ["warn", { order: ["image", "restartt"] }],
+      },
+    });
+    expect(messagesFor(source, "service-key-order", config)).toEqual([
+      'Service "app": key "ports" is out of order (expected "image" at position 1)',
+    ]);
+    expect(fixSource(source, config).source).toBe(
+      "services:\n  app:\n    image: nginx:1\n    # typo\n    restartt: always\n    ports: [80]\n",
+    );
+  });
+
+  it("orders known top-level keys around an unknown key", () => {
+    const source = "services: {}\nunknown: true\nname: demo\n";
+    expect(messagesFor(source, "top-level-order")).toHaveLength(1);
+    const fixed = "name: demo\nunknown: true\nservices: {}\n";
+    expect(fixSource(source).source).toBe(fixed);
+    expect(messagesFor(fixed, "spec-schema")).toHaveLength(1);
+    expect(fixSource(fixed).changed).toBe(false);
   });
 });
 

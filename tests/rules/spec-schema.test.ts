@@ -233,6 +233,73 @@ describe("false positive mitigation", () => {
   });
 });
 
+describe("privileged in Compose override fragments", () => {
+  it.each([
+    "services: {app: !reset {privileged: enabled}, quiet: !reset {privileged: yes}}",
+    `x-app: &app !reset {privileged: enabled}
+x-quiet: &quiet !reset {privileged: yes}
+services: {app: *app, quiet: *quiet}
+`,
+    `x-services: &defaults
+  app: !reset {privileged: enabled}
+  quiet: !reset {privileged: yes}
+services:
+  <<: *defaults
+`,
+    "services: !reset {app: {privileged: enabled}, quiet: {privileged: yes}}",
+  ])("ignores privilege fields inside a reset ancestor", (source) => {
+    const { result } = lintSource(
+      source,
+      "compose.override.yaml",
+      allRules,
+      config,
+      { partial: true },
+    );
+    expect(result.diagnostics.map(({ ruleId }) => ruleId)).toEqual([]);
+  });
+
+  it("still checks privilege under a live !override mapping", () => {
+    const source = `services: !override
+  app: !override {image: nginx:1, privileged: enabled}
+  active: !override {image: nginx:1, privileged: yes}
+`;
+    const { result } = lintSource(
+      source,
+      "compose.override.yaml",
+      allRules,
+      config,
+      { partial: true },
+    );
+    expect(
+      result.diagnostics.map(({ ruleId, message }) => [ruleId, message]),
+    ).toEqual([
+      [
+        "spec-schema",
+        'Service "app": "privileged" must be a boolean or a Compose boolean string',
+      ],
+      [
+        "no-privileged",
+        'Service "active": privileged mode grants full access to the host',
+      ],
+    ]);
+  });
+
+  it("does not inherit privilege from a removed service", () => {
+    const source = `services:
+  base: !reset {image: nginx:1, privileged: yes}
+  child: {extends: base, image: nginx:1}
+`;
+    const { document, result } = lint(source);
+    expect(document.getMergedService("base")).toBeNull();
+    expect(
+      document.getMergedServiceValue("child", "privileged"),
+    ).toBeUndefined();
+    expect(
+      result.diagnostics.some(({ ruleId }) => ruleId === "no-privileged"),
+    ).toBe(false);
+  });
+});
+
 describe("noise reduction", () => {
   it("collapses a oneOf branch explosion into one diagnostic", () => {
     const source = [

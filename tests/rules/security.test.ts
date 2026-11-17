@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveConfig } from "../../src/config/loader.js";
-import { messagesFor, ruleIds } from "../helpers.js";
+import { ComposeDocument } from "../../src/core/document.js";
+import { diagnosticsFor, messagesFor, ruleIds } from "../helpers.js";
 
 /** A one-service file whose `ports:` body is provided by the test. */
 function portsFixture(ports: string): string {
@@ -101,6 +102,27 @@ describe("no-unbound-ports no-unbound-ports", () => {
 });
 
 describe("image-require-tag image-require-tag", () => {
+  it.each(["$IMAGE", `\${IMAGE}`, "example/$IMAGE"])(
+    "does not infer a tag for interpolated image %s",
+    (image) => {
+      expect(ruleIds(`services:\n  web:\n    image: ${image}\n`)).not.toContain(
+        "image-require-tag",
+      );
+    },
+  );
+
+  it("does not treat a slash inside an image variable as a registry separator", () => {
+    for (const image of [
+      `\${IMAGE:-registry/app}`,
+      `\${IMAGE:-\${REGISTRY}/app}`,
+    ]) {
+      expect(ruleIds(imageFixture(image))).not.toContain("image-require-tag");
+    }
+    expect(
+      ruleIds(imageFixture(`\${REGISTRY:-example/org}/app:latest`)),
+    ).toContain("image-require-tag");
+  });
+
   it("reports image without tag", () => {
     expect(ruleIds("services:\n  web:\n    image: nginx\n")).toContain(
       "image-require-tag",
@@ -127,31 +149,79 @@ describe("image-require-tag image-require-tag", () => {
     ).not.toContain("image-require-tag");
   });
 
-  // With `build`, `image` names the artifact Compose produces, so there is no
-  // registry reference to pin. Real projects use this to tag a local build
-  // (`image: sentry-self-hosted-local`), and reporting it was noise.
-  it("ignores an image that names a local build", () => {
-    for (const build of ["build: .", "build:\n      context: ."]) {
+  it.each(["build: .", "build:\n      context: ."])(
+    "reports an unpinned image with %s when pull policy is unspecified",
+    (build) => {
       expect(
-        ruleIds(`services:\n  web:\n    image: app-local\n    ${build}\n`),
-      ).not.toContain("image-require-tag");
-    }
+        ruleIds(`services:\n  web:\n    image: busybox:latest\n    ${build}\n`),
+      ).toContain("image-require-tag");
+    },
+  );
+
+  it("reports an unpinned image when build is inherited and pulling is allowed", () => {
+    const source = `x-built: &built\n  build: .\nservices:\n  web:\n    <<: *built\n    image: busybox:latest\n`;
+    expect(ruleIds(source)).toContain("image-require-tag");
   });
 
-  it("ignores a built image inherited through an anchor", () => {
-    const source = [
-      "name: qa",
-      "x-built: &built",
-      "  build: .",
-      "services:",
-      "  web:",
-      "    <<: *built",
-      "    image: app-local",
-      '    healthcheck: { test: ["CMD", "true"] }',
-      "",
-    ].join("\n");
+  it("inherits a null build from a local extends service", () => {
+    const source = `services:
+  base:
+    image: example
+    build: .
+    pull_policy: build
+  child:
+    extends:
+      service: base
+    build: null
+`;
+    expect(messagesFor(source, "image-require-tag")).toEqual([]);
+    expect(messagesFor(source, "spec-schema")).toEqual([]);
+  });
+
+  it("does not report a local image label when pull_policy forces building", () => {
+    const source = `services:\n  web:\n    image: app-local\n    build: .\n    pull_policy: build\n`;
     expect(ruleIds(source)).not.toContain("image-require-tag");
   });
+
+  it("does not treat a reset or absent build as a local build output", () => {
+    const source = `services:
+  absent:
+    image: nginx:latest
+    pull_policy: build
+  reset:
+    image: nginx:latest
+    build: !reset .
+    pull_policy: build
+`;
+    const messages = messagesFor(source, "image-require-tag");
+    expect(messages).toHaveLength(2);
+  });
+
+  it("honors reset and inherited null pull policies", () => {
+    const source = `services:
+  base:
+    image: busybox:latest
+    build: .
+    pull_policy: build
+  reset:
+    extends: base
+    pull_policy: !reset build
+  inherited:
+    extends: base
+    pull_policy: null
+`;
+    const messages = messagesFor(source, "image-require-tag");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain('Service "reset"');
+  });
+
+  it.each(["always", "missing", "never", `\${POLICY}`])(
+    "reports an unpinned image with build and pull policy %s",
+    (policy) => {
+      const source = `services:\n  web:\n    image: busybox:latest\n    build: .\n    pull_policy: ${policy}\n`;
+      expect(ruleIds(source)).toContain("image-require-tag");
+    },
+  );
 });
 
 describe("no-unbound-ports published ports", () => {
@@ -169,6 +239,58 @@ describe("no-unbound-ports published ports", () => {
 
   it("reports the IPv6 wildcard", () => {
     expect(portMessages('\n      - "[::]:4000:4000"')).toHaveLength(1);
+  });
+
+  it.each([
+    '"[0000:0:0:0:0:0:0:0]:8080:80"',
+    '"[0::0]:8080:80"',
+    '"[::0.0.0.0]:8080:80"',
+    '{target: 80, published: 8080, host_ip: "0:0:0:0:0:0:0:0"}',
+  ])("reports equivalent IPv6 wildcard %s", (entry) => {
+    expect(portMessages(`\n      - ${entry}`)).toEqual([
+      expect.stringMatching(/on all interfaces \(::\)$/),
+    ]);
+    expect(
+      portMessages(`\n      - ${entry}`, [
+        { service: "web", published: ["8080/tcp"] },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("keeps expanded IPv6 loopback quiet", () => {
+    expect(portMessages('\n      - "[0:0:0:0:0:0:0:1]:8080:80"')).toEqual([]);
+  });
+
+  it("recognizes a published port with nested interpolation without allowlisting its fallback", () => {
+    const entry = `\${API_GW_HTTP_PORT:-\${KONG_HTTP_PORT:-8000}}:8000/tcp`;
+    expect(
+      portMessages(`\n      - "${entry}"`, [
+        { service: "web", published: ["8000/tcp"] },
+      ]),
+    ).toEqual([
+      `Service "web": port "${entry}" is published on all interfaces (0.0.0.0)`,
+    ]);
+  });
+
+  it("keeps an explicit loopback binding around nested interpolation quiet", () => {
+    expect(
+      portMessages(
+        `\n      - "[::1]:\${HTTP_PORT:-\${DEFAULT_PORT:-8000}}:8000/tcp"`,
+      ),
+    ).toEqual([]);
+  });
+
+  it("ignores separators inside the interpolation expression", () => {
+    const entry = `8080:\${TARGET:?set target: see config/path}`;
+    expect(
+      portMessages(`\n      - "${entry}"`, [
+        { service: "web", published: ["8080/tcp"] },
+      ]),
+    ).toEqual([]);
+    expect(portMessages(`\n      - "${entry}"`)).toHaveLength(1);
+    expect(
+      portMessages(`\n      - "\${HOST_BINDING:-127.0.0.1}:8080:80"`),
+    ).toEqual([]);
   });
 
   it("reports a port range", () => {
@@ -213,15 +335,51 @@ describe("no-unbound-ports published ports", () => {
     ).toEqual([]);
   });
 
-  it("reports a dynamically assigned host port", () => {
-    expect(portMessages('\n      - "3000"')).toHaveLength(1);
-    expect(portMessages("\n      - 3000")).toHaveLength(1);
+  it.each([
+    "80",
+    '"80"',
+    "{target: 80}",
+    "{target: 80, mode: host}",
+    '"0:80"',
+    '{target: 80, published: "0"}',
+  ])(
+    "reports a dynamically assigned port for %s without using its target as an allowance",
+    (entry) => {
+      expect(
+        portMessages(`\n      - ${entry}`, [
+          { service: "web", published: ["80/tcp"] },
+        ]),
+      ).toEqual([
+        'Service "web": container port "80" gets a dynamically assigned host port on all interfaces (0.0.0.0)',
+      ]);
+    },
+  );
+
+  it.each([
+    '"127.0.0.1::80"',
+    '"[::1]::80"',
+    '{target: 80, host_ip: "127.0.0.1"}',
+    '{target: 80, host_ip: "::1"}',
+  ])("ignores dynamic ports bound to loopback in %s", (entry) => {
+    expect(portMessages(`\n      - ${entry}`)).toEqual([]);
   });
 
-  it("ignores a long syntax entry that publishes nothing", () => {
-    expect(portMessages("\n      - target: 80\n        mode: host")).toEqual(
-      [],
-    );
+  it.each(['"[::]::80"', '{target: 80, host_ip: "::"}'])(
+    "reports dynamic IPv6 wildcard bindings for %s",
+    (entry) => {
+      expect(portMessages(`\n      - ${entry}`)).toEqual([
+        'Service "web": container port "80" gets a dynamically assigned host port on all interfaces (::)',
+      ]);
+    },
+  );
+
+  it("ignores expose without ports", () => {
+    expect(
+      messagesFor(
+        "services:\n  web:\n    image: nginx:1\n    expose: [80]\n",
+        "no-unbound-ports",
+      ),
+    ).toEqual([]);
   });
 
   it("reports the protocol form on all interfaces", () => {
@@ -339,19 +497,20 @@ describe("no-unbound-ports allowed published ports", () => {
 });
 
 describe("no-privileged privileged", () => {
+  function fixture(value: string): string {
+    return [
+      "name: qa",
+      "services:",
+      "  web:",
+      "    image: nginx:1.27",
+      '    healthcheck: { test: ["CMD", "true"] }',
+      `    privileged: ${value}`,
+      "",
+    ].join("\n");
+  }
+
   function messages(value: string): string[] {
-    return messagesFor(
-      [
-        "name: qa",
-        "services:",
-        "  web:",
-        "    image: nginx:1.27",
-        '    healthcheck: { test: ["CMD", "true"] }',
-        `    privileged: ${value}`,
-        "",
-      ].join("\n"),
-      "no-privileged",
-    );
+    return messagesFor(fixture(value), "no-privileged");
   }
 
   it("reports the boolean form", () => {
@@ -370,9 +529,77 @@ describe("no-privileged privileged", () => {
     expect(messages('"false"')).toEqual([]);
   });
 
-  it("does not report an uninterpolated variable", () => {
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: Compose interpolation literal
-    expect(messages("${PRIVILEGED}")).toEqual([]);
+  it.each(["yEs", '"YeS"', "ON", "'oN'", "Y", '"y"'])(
+    "reports enabled legacy spelling %s without a schema error",
+    (value) => {
+      expect(messages(value)).toHaveLength(1);
+      expect(messagesFor(fixture(value), "spec-schema")).toEqual([]);
+    },
+  );
+
+  it.each(["nO", '"No"', "OFF", "'oFf'", "N", '"n"'])(
+    "accepts disabled legacy spelling %s",
+    (value) => {
+      expect(messages(value)).toEqual([]);
+      expect(messagesFor(fixture(value), "spec-schema")).toEqual([]);
+    },
+  );
+
+  it.each([
+    '" true "',
+    '"yes "',
+    '"1"',
+    '"0"',
+    '""',
+    "enabled",
+    "t",
+    "1",
+    '"$$PRIVILEGED"',
+    `"\${PRIVILEGED"`,
+    "!override enabled",
+  ])("reports invalid literal %s as a schema error only", (value) => {
+    expect(messages(value)).toEqual([]);
+    const diagnostics = diagnosticsFor(fixture(value), "spec-schema");
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].message).toContain('"privileged" must be a boolean');
+    expect(diagnostics[0].range.start.line).toBe(6);
+  });
+
+  it.each([`\${PRIVILEGED}`, '"$PRIVILEGED"', `"\${PRIVILEGED:-yes}"`])(
+    "leaves interpolated value %s unresolved",
+    (value) => {
+      expect(messages(value)).toEqual([]);
+      expect(messagesFor(fixture(value), "spec-schema")).toEqual([]);
+    },
+  );
+
+  it("honors inherited legacy flags and reset tags", () => {
+    const source = `x-enable: &enable YES
+services:
+  base:
+    image: nginx:1
+    privileged: *enable
+    environment: {FLAG: yes}
+  child:
+    extends: base
+  reset:
+    extends: base
+    privileged: !reset enabled
+  disabled:
+    extends: base
+    privileged: Off
+`;
+    expect(messagesFor(source, "no-privileged")).toEqual([
+      'Service "base": privileged mode grants full access to the host',
+      'Service "child": privileged mode grants full access to the host (inherited)',
+    ]);
+    expect(messagesFor(source, "spec-schema")).toEqual([]);
+    expect(
+      new ComposeDocument(source, "compose.yaml").getMergedServiceValue(
+        "base",
+        "environment",
+      ),
+    ).toEqual({ FLAG: "yes" });
   });
 });
 
