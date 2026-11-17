@@ -112,9 +112,12 @@ describe("image-require-tag image-require-tag", () => {
   );
 
   it("does not treat a slash inside an image variable as a registry separator", () => {
-    expect(ruleIds(imageFixture(`\${IMAGE:-registry/app}`))).not.toContain(
-      "image-require-tag",
-    );
+    for (const image of [
+      `\${IMAGE:-registry/app}`,
+      `\${IMAGE:-\${REGISTRY}/app}`,
+    ]) {
+      expect(ruleIds(imageFixture(image))).not.toContain("image-require-tag");
+    }
     expect(
       ruleIds(imageFixture(`\${REGISTRY:-example/org}/app:latest`)),
     ).toContain("image-require-tag");
