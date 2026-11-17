@@ -33,8 +33,8 @@ export const imageRequireTag: Rule = {
       const lastSlash = image.lastIndexOf("/");
       const namePart = lastSlash === -1 ? image : image.slice(lastSlash + 1);
 
-      // `image: ${IMAGE}` may already carry a tag; Compose resolves it later.
-      if (namePart.includes("${")) continue;
+      // The image name may be supplied by either $IMAGE or ${IMAGE}.
+      if (/\$(?:\{|[A-Za-z_])/.test(namePart)) continue;
 
       const colonIndex = namePart.lastIndexOf(":");
 

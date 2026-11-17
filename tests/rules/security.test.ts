@@ -102,6 +102,15 @@ describe("no-unbound-ports no-unbound-ports", () => {
 });
 
 describe("image-require-tag image-require-tag", () => {
+  it.each(["$IMAGE", `\${IMAGE}`, "example/$IMAGE"])(
+    "does not infer a tag for interpolated image %s",
+    (image) => {
+      expect(ruleIds(`services:\n  web:\n    image: ${image}\n`)).not.toContain(
+        "image-require-tag",
+      );
+    },
+  );
+
   it("reports image without tag", () => {
     expect(ruleIds("services:\n  web:\n    image: nginx\n")).toContain(
       "image-require-tag",
